@@ -1,0 +1,8 @@
+# Embudo — dependencias (todo gratuito, sin API keys de pago)
+streamlit>=1.33
+pandas>=2.0
+numpy>=1.24
+plotly>=5.20
+yfinance>=0.2.40        # Datos de mercado (Yahoo Finance, sin API key)
+vaderSentiment>=3.3.2   # Sentimiento local, sin API
+requests>=2.31
