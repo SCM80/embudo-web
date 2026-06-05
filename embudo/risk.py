@@ -33,18 +33,38 @@ def build_plan(
     risk_pct: float = config.DEFAULT_RISK_PER_TRADE,
     atr_mult: float = config.DEFAULT_ATR_STOP_MULT,
     reward_risk: float = config.DEFAULT_REWARD_RISK,
+    structure_stop: float | None = None,
+    structure_target: float | None = None,
 ) -> TradePlan | None:
-    """Construye un plan de trade. Devuelve None si los datos no son válidos."""
+    """Construye un plan de trade. Devuelve None si los datos no son válidos.
+
+    Si se pasa `structure_stop` (p.ej. el soporte más cercano para un largo) y
+    es coherente con la dirección, se usa en lugar del stop por ATR — un stop en
+    estructura suele ser más fiable que uno ciego. El ATR sigue siendo el
+    respaldo cuando no hay nivel válido.
+    """
     if not entry or not atr or atr <= 0 or direction == 0:
         return None
 
     stop_distance = atr_mult * atr
+    stop_basis = f"{atr_mult:g}·ATR"
     if direction > 0:
         stop = entry - stop_distance
-        target = entry + reward_risk * stop_distance
+        # Soporte por debajo de la entrada: stop justo bajo el nivel.
+        if structure_stop is not None and 0 < structure_stop < entry:
+            stop = structure_stop * 0.998
+            stop_basis = "soporte"
+        target = entry + reward_risk * abs(entry - stop)
+        if structure_target is not None and structure_target > entry:
+            target = structure_target  # resistencia como objetivo natural
     else:
         stop = entry + stop_distance
-        target = entry - reward_risk * stop_distance
+        if structure_stop is not None and structure_stop > entry:
+            stop = structure_stop * 1.002
+            stop_basis = "resistencia"
+        target = entry - reward_risk * abs(entry - stop)
+        if structure_target is not None and 0 < structure_target < entry:
+            target = structure_target
 
     risk_per_share = abs(entry - stop)
     reward_per_share = abs(target - entry)
@@ -57,7 +77,7 @@ def build_plan(
 
     sentido = "LARGO" if direction > 0 else "CORTO"
     detail = (
-        f"{sentido}: entrada {entry:.2f}, stop {stop:.2f} ({atr_mult:g}·ATR), "
+        f"{sentido}: entrada {entry:.2f}, stop {stop:.2f} ({stop_basis}), "
         f"objetivo {target:.2f}. R:R={rr:.1f}. "
         f"Arriesgando {risk_pct*100:.1f}% ({capital_risk:.0f}) -> {shares} acciones."
     )

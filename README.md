@@ -22,8 +22,13 @@ lugar de creérselas a ciegas.
 - **Régimen de mercado** (semáforo): atenúa señales que reman contra el mercado.
 - **Consenso honesto:** no esconde el desacuerdo — si técnico y cualitativo se
   contradicen, baja la confianza y te avisa.
-- **Plan de riesgo:** stop por ATR, tamaño de posición por % de capital y R:R.
+- **Plan de riesgo:** stop por ATR **o anclado en soporte/resistencia**, tamaño
+  de posición por % de capital y R:R.
 - **Backtest:** win rate y retorno medio histórico de cada señal.
+- **Niveles de soporte/resistencia automáticos** dibujados en el gráfico.
+- **VWAP** en intraday y detección de **ruptura de soporte** en cortos.
+- **⭐ Watchlist propia persistente** usable como universo en el screener.
+- **Exportación a CSV** de los resultados del recomendador.
 
 ## 🧱 Fuentes de datos (todas gratis, sin key)
 

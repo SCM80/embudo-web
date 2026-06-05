@@ -13,6 +13,7 @@ from enum import Enum
 
 import pandas as pd
 
+from .. import levels as levels_mod
 from . import trend, volume
 from .base import Signal, SignalGroup
 
@@ -48,6 +49,22 @@ def _rsi_signal(rsi: float | None, horizon: Horizon) -> Signal | None:
     return None
 
 
+def _support_breakdown(df: pd.DataFrame, lookback: int = 60) -> Signal | None:
+    """Detecta si el precio acaba de perder un soporte relevante (señal bajista)."""
+    recent = df.iloc[-lookback:] if len(df) > lookback else df
+    lv = levels_mod.detect(recent)
+    close = _last(df, "Close")
+    prev = float(df["Close"].iloc[-2]) if len(df) > 1 else close
+    if close is None:
+        return None
+    support = levels_mod.nearest_support(lv, prev)
+    # Antes el precio estaba por encima del soporte y ahora lo ha perdido.
+    if support is not None and prev >= support.price > close:
+        return Signal("Ruptura de soporte", -0.8, 1.4,
+                      f"Pérdida del soporte en {support.price:.2f} ({support.strength}): confirmación bajista.")
+    return None
+
+
 def evaluate(df: pd.DataFrame, horizon: Horizon) -> SignalGroup:
     """Construye el grupo técnico para el horizonte indicado."""
     group = SignalGroup(f"Técnico · {horizon.value}")
@@ -72,6 +89,17 @@ def evaluate(df: pd.DataFrame, horizon: Horizon) -> SignalGroup:
                 group.add(Signal("EMA9 > EMA21", 0.6, 1.4, "Cruce rápido alcista: momentum intradía positivo."))
             else:
                 group.add(Signal("EMA9 < EMA21", -0.6, 1.4, "Cruce rápido bajista: momentum intradía negativo."))
+        # VWAP: referencia intradía clave (compradores vs vendedores de la sesión).
+        close = _last(df, "Close")
+        vwap = _last(df, "vwap")
+        if close is not None and vwap is not None and vwap > 0:
+            dist = (close - vwap) / vwap
+            if close >= vwap:
+                group.add(Signal("Precio > VWAP", min(1.0, 0.5 + abs(dist) * 10), 1.3,
+                                 f"Precio sobre el VWAP ({dist*100:+.1f}%): control comprador en la sesión."))
+            else:
+                group.add(Signal("Precio < VWAP", -min(1.0, 0.5 + abs(dist) * 10), 1.3,
+                                 f"Precio bajo el VWAP ({dist*100:+.1f}%): control vendedor en la sesión."))
     elif horizon is Horizon.CORTO:
         # Para cortos invertimos la lectura: penaliza la fortaleza, premia la debilidad.
         for s in trend_group.signals:
@@ -80,6 +108,10 @@ def evaluate(df: pd.DataFrame, horizon: Horizon) -> SignalGroup:
         bb_pct = _last(df, "bb_pct")
         if bb_pct is not None and bb_pct >= 1.0:
             group.add(Signal("Fuera Bollinger sup.", -0.6, 1.2, "Precio sobre la banda superior: extensión, riesgo de reversión."))
+        # Ruptura de soporte: la confirmación bajista más fiable para un corto.
+        breakdown = _support_breakdown(df)
+        if breakdown is not None:
+            group.add(breakdown)
 
     group.signals.extend(trend_group.signals)
     group.signals.extend(volume_group.signals)

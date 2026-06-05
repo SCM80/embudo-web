@@ -110,6 +110,25 @@ def relative_volume(df: pd.DataFrame, period: int = 20) -> pd.Series:
     return df["Volume"] / avg.replace(0.0, np.nan)
 
 
+def vwap(df: pd.DataFrame) -> pd.Series:
+    """VWAP (Volume Weighted Average Price) con reinicio por sesión diaria.
+
+    Referencia clave del intradía: si el precio está sobre el VWAP, los
+    compradores dominan la sesión. Para datos diarios o sin marca de tiempo
+    intradía, calcula un VWAP acumulado global (degradación elegante).
+    """
+    typical = (df["High"] + df["Low"] + df["Close"]) / 3.0
+    pv = typical * df["Volume"]
+    try:
+        days = df.index.normalize()  # reinicio por día natural (intradía)
+        cum_pv = pv.groupby(days).cumsum()
+        cum_vol = df["Volume"].groupby(days).cumsum()
+    except (AttributeError, TypeError):
+        cum_pv = pv.cumsum()
+        cum_vol = df["Volume"].cumsum()
+    return cum_pv / cum_vol.replace(0.0, np.nan)
+
+
 def enrich(df: pd.DataFrame) -> pd.DataFrame:
     """Añade todos los indicadores a un DataFrame OHLCV y lo devuelve."""
     out = df.copy()
@@ -125,4 +144,5 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     out = out.join(adx(out))
     out["obv"] = obv(out)
     out["rel_volume"] = relative_volume(out)
+    out["vwap"] = vwap(out)
     return out

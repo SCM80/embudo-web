@@ -88,7 +88,8 @@ ni slippage: es validación honesta, no un motor de trading profesional.
 
 - **Fase 1 (hecha):** datos + indicadores + régimen + consenso honesto + ficha
   explicada + perfiles + screener + riesgo + backtest mínimo + tests.
-- **Fase 2:** afinar intraday/corto, niveles soporte/resistencia automáticos,
-  watchlist propia persistente, exportar resultados.
+- **Fase 2 (hecha):** niveles de soporte/resistencia automáticos (+ stops en
+  estructura), VWAP en intraday, ruptura de soporte en cortos, watchlist propia
+  persistente (universo en el screener) y exportación de resultados a CSV.
 - **Fase 3:** **diario de operaciones + post-mortem** (cerrar el bucle de
   aprendizaje), alertas y backtest con costes/comisiones.

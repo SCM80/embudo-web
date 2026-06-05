@@ -6,15 +6,16 @@ la ficha de un valor como el screener.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
-from . import backtest, risk
+from . import backtest, levels as levels_mod, risk
 from .consensus import engine
 from .consensus.engine import Consensus
 from .data import yahoo
 from .indicators import technical
+from .levels import Level
 from .profiles import StrategyProfile
 from .qualitative import analysts, sentiment
 from .regime import Regime
@@ -29,6 +30,7 @@ class Analysis:
     consensus: Consensus
     trade_plan: risk.TradePlan | None
     backtest: backtest.BacktestResult | None
+    levels: list[Level] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -65,15 +67,30 @@ def analyze(
 
     cons = engine.evaluate(df, profile, analyst_view, sentiment_view, regime)
 
+    # Niveles de soporte/resistencia para gráfico y para anclar el riesgo.
+    sr_levels = levels_mod.detect(raw)
+
     # Plan de riesgo en la dirección de la señal (o la del perfil para cortos).
     atr = float(df["atr"].iloc[-1]) if not df["atr"].dropna().empty else 0.0
     entry = float(df["Close"].iloc[-1])
     plan_dir = cons.direction if cons.direction != 0 else profile.direction
-    plan = risk.build_plan(entry, atr, plan_dir, capital) if atr > 0 else None
+    plan = None
+    if atr > 0:
+        if plan_dir > 0:
+            stop_lv = levels_mod.nearest_support(sr_levels, entry)
+            tgt_lv = levels_mod.nearest_resistance(sr_levels, entry)
+        else:
+            stop_lv = levels_mod.nearest_resistance(sr_levels, entry)
+            tgt_lv = levels_mod.nearest_support(sr_levels, entry)
+        plan = risk.build_plan(
+            entry, atr, plan_dir, capital,
+            structure_stop=stop_lv.price if stop_lv else None,
+            structure_target=tgt_lv.price if tgt_lv else None,
+        )
 
     bt = backtest.run(raw, profile) if with_backtest else None
 
-    return Analysis(ticker, name, profile, df, cons, plan, bt)
+    return Analysis(ticker, name, profile, df, cons, plan, bt, levels=sr_levels)
 
 
 def _empty_consensus() -> Consensus:

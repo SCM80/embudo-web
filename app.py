@@ -15,11 +15,13 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from embudo import analyzer
+from embudo import analyzer, watchlist
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS, StrategyProfile
 from embudo.screener import recommender
 from embudo.signals.horizons import Horizon
+
+WATCHLIST_NAME = "⭐ Mi watchlist"
 
 st.set_page_config(page_title="Embudo · Copiloto de inversión", page_icon="📊", layout="wide")
 
@@ -55,6 +57,25 @@ def sidebar_profile() -> tuple[str, StrategyProfile, float]:
     return preset_name, profile, capital
 
 
+def sidebar_watchlist() -> None:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⭐ Mi watchlist")
+    current = watchlist.load()
+    new_t = st.sidebar.text_input("Añadir ticker", key="wl_add", placeholder="Ej.: NVDA")
+    if st.sidebar.button("Añadir", key="wl_add_btn") and new_t:
+        watchlist.add(new_t)
+        st.rerun()
+    if current:
+        to_remove = st.sidebar.multiselect("Quitar de la lista", current, key="wl_rm")
+        if to_remove:
+            for t in to_remove:
+                watchlist.remove(t)
+            st.rerun()
+        st.sidebar.caption("En lista: " + ", ".join(current))
+    else:
+        st.sidebar.caption("Aún no tienes valores guardados.")
+
+
 def label_badge(label: str, score: float, confidence: float) -> None:
     color = LABEL_COLORS.get(label, "#9e9e9e")
     st.markdown(
@@ -73,16 +94,24 @@ def render_regime(regime) -> None:
     st.info(f"{emoji} **Régimen de mercado: {regime.label}** — {regime.detail}")
 
 
-def price_chart(df: pd.DataFrame, name: str) -> go.Figure:
+def price_chart(df: pd.DataFrame, name: str, levels=None, show_vwap: bool = False) -> go.Figure:
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28],
                         vertical_spacing=0.03)
     fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"],
                                  low=df["Low"], close=df["Close"], name="Precio"), row=1, col=1)
-    for col, color, label in [("sma_fast", "#1f77b4", "SMA50"),
-                              ("sma_slow", "#ff7f0e", "SMA200")]:
+    lines = [("sma_fast", "#1f77b4", "SMA50"), ("sma_slow", "#ff7f0e", "SMA200")]
+    if show_vwap:
+        lines.append(("vwap", "#9c27b0", "VWAP"))
+    for col, color, label in lines:
         if col in df and df[col].notna().any():
             fig.add_trace(go.Scatter(x=df.index, y=df[col], line=dict(color=color, width=1),
                                      name=label), row=1, col=1)
+    # Niveles de soporte (verde) y resistencia (rojo).
+    for lv in (levels or []):
+        color = "#ef5350" if lv.kind == "resistencia" else "#26a69a"
+        fig.add_hline(y=lv.price, line=dict(color=color, width=1, dash="dot"),
+                      annotation_text=f"{lv.kind[:3]} {lv.price:.2f} ({lv.strength})",
+                      annotation_position="right", annotation_font_size=9, row=1, col=1)
     colors = ["#26a69a" if c >= o else "#ef5350" for o, c in zip(df["Open"], df["Close"])]
     fig.add_trace(go.Bar(x=df.index, y=df["Volume"], marker_color=colors, name="Volumen"),
                   row=2, col=1)
@@ -114,7 +143,13 @@ def render_analysis(a: analyzer.Analysis) -> None:
     for col, (k, v) in zip(cols, cons.dimension_scores.items()):
         col.metric(names.get(k, k), f"{v:+.2f}")
 
-    st.plotly_chart(price_chart(a.df, a.name), use_container_width=True)
+    show_vwap = a.profile.horizon is Horizon.INTRADAY
+    st.plotly_chart(price_chart(a.df, a.name, levels=a.levels, show_vwap=show_vwap),
+                    use_container_width=True)
+
+    if a.levels:
+        st.caption("**Niveles automáticos:** " + " · ".join(
+            f"{lv.kind} {lv.price:.2f} ({lv.strength})" for lv in a.levels))
 
     lcol, rcol = st.columns(2)
     with lcol:
@@ -162,9 +197,17 @@ def render_analysis(a: analyzer.Analysis) -> None:
 
 def mode_explore(profile: StrategyProfile, capital: float) -> None:
     st.subheader("🧭 Explorar — recomendador por estrategia")
-    universe_name = st.selectbox("Universo", list(universe_data.UNIVERSES.keys()))
-    n = len(universe_data.UNIVERSES[universe_name])
-    st.caption(f"{n} valores. Escanear puede tardar (datos gratuitos de Yahoo con rate-limit).")
+    options = list(universe_data.UNIVERSES.keys()) + [WATCHLIST_NAME]
+    universe_name = st.selectbox("Universo", options)
+
+    if universe_name == WATCHLIST_NAME:
+        tickers = watchlist.load()
+        if not tickers:
+            st.info("Tu watchlist está vacía. Añade valores desde la barra lateral ⭐.")
+            return
+    else:
+        tickers = universe_data.UNIVERSES[universe_name]
+    st.caption(f"{len(tickers)} valores. Escanear puede tardar (datos gratuitos de Yahoo con rate-limit).")
 
     if st.button("🔎 Escanear universo", type="primary"):
         bar = st.progress(0.0, text="Iniciando…")
@@ -172,7 +215,11 @@ def mode_explore(profile: StrategyProfile, capital: float) -> None:
         def progress(i, total, ticker):
             bar.progress(i / total, text=f"Analizando {ticker} ({i}/{total})")
 
-        df, regime = recommender.screen_named(universe_name, profile, capital=capital, progress=progress)
+        if universe_name == WATCHLIST_NAME:
+            df = recommender.screen(tickers, profile, capital=capital, progress=progress)
+            regime = None
+        else:
+            df, regime = recommender.screen_named(universe_name, profile, capital=capital, progress=progress)
         bar.empty()
         render_regime(regime)
         if df.empty:
@@ -184,6 +231,8 @@ def mode_explore(profile: StrategyProfile, capital: float) -> None:
                                   "score": "Score", "confidence": "Confianza",
                                   "reason": "Motivo principal", "rel_volume": "Vol. rel."})
         st.dataframe(show, hide_index=True, use_container_width=True)
+        st.download_button("⬇️ Exportar a CSV", df.to_csv(index=False).encode("utf-8"),
+                           file_name=f"embudo_{profile.horizon.name.lower()}.csv", mime="text/csv")
         st.session_state["last_screen"] = df["ticker"].tolist()
 
 
@@ -204,6 +253,7 @@ def main() -> None:
                "con backtest. Gratis y sin API keys.")
 
     preset_name, profile, capital = sidebar_profile()
+    sidebar_watchlist()
     st.sidebar.markdown("---")
     st.sidebar.warning("⚠️ Herramienta de apoyo a la decisión, **no asesoramiento financiero**.")
 
