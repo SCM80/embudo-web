@@ -40,6 +40,7 @@ ADX_PERIOD = 14
 DEFAULT_RISK_PER_TRADE = 0.01      # 1% del capital por operación
 DEFAULT_ATR_STOP_MULT = 2.0        # stop a 2 ATR de la entrada
 DEFAULT_REWARD_RISK = 2.0          # objetivo por defecto = 2R
+DEFAULT_COMMISSION = 0.0005        # 5 pb por lado (comisión + slippage estimados)
 
 # --- Caché de datos ---
 CACHE_DIR = ".embudo_cache"

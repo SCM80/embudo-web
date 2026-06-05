@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from embudo import analyzer, watchlist
+from embudo import alerts, analyzer, journal, postmortem, watchlist
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS, StrategyProfile
 from embudo.screener import recommender
@@ -245,6 +245,129 @@ def mode_analyze(profile: StrategyProfile, capital: float) -> None:
         with st.spinner(f"Analizando {ticker}…"):
             a = analyzer.analyze(ticker.strip().upper(), profile, capital=capital)
         render_analysis(a)
+        if a.trade_plan and not a.error:
+            p = a.trade_plan
+            if st.button("📓 Anotar este plan en el diario"):
+                journal.add(journal.Trade(
+                    ticker=a.ticker, direction=p.direction, entry=p.entry, stop=p.stop,
+                    target=p.target, shares=p.shares, horizon=profile.horizon.value,
+                    thesis=f"{a.consensus.label} (score {a.consensus.score:+.2f}, conf {a.consensus.confidence*100:.0f}%)",
+                ))
+                st.success("Operación añadida al diario (pestaña 📓 Diario).")
+
+
+def mode_journal() -> None:
+    st.subheader("📓 Diario de operaciones")
+    st.caption("Registra tus operaciones con su tesis y ciérralas para construir tu estadística real.")
+
+    with st.expander("➕ Registrar operación manual"):
+        c = st.columns(4)
+        tk = c[0].text_input("Ticker", key="j_tk")
+        direction = c[1].selectbox("Dirección", [1, -1], format_func=lambda d: "Largo" if d > 0 else "Corto", key="j_dir")
+        entry = c[2].number_input("Entrada", min_value=0.0, value=100.0, key="j_entry")
+        shares = c[3].number_input("Acciones", min_value=1, value=10, key="j_shares")
+        c2 = st.columns(3)
+        stop = c2[0].number_input("Stop", min_value=0.0, value=95.0, key="j_stop")
+        target = c2[1].number_input("Objetivo", min_value=0.0, value=110.0, key="j_target")
+        horizon = c2[2].selectbox("Horizonte", [h.value for h in Horizon], key="j_hz")
+        thesis = st.text_input("Tesis (por qué entras)", key="j_thesis")
+        if st.button("Guardar operación") and tk:
+            journal.add(journal.Trade(tk.strip().upper(), int(direction), entry, stop, target,
+                                      int(shares), horizon=horizon, thesis=thesis))
+            st.success("Operación registrada.")
+            st.rerun()
+
+    open_t = journal.open_trades()
+    st.markdown(f"#### Abiertas ({len(open_t)})")
+    if open_t:
+        for t in open_t:
+            cols = st.columns([3, 2, 2])
+            sentido = "🟢 Largo" if t.direction > 0 else "🔴 Corto"
+            cols[0].write(f"**{t.ticker}** {sentido} · entrada {t.entry:.2f} · stop {t.stop:.2f} · obj {t.target:.2f}")
+            exit_p = cols[1].number_input("Cierre", min_value=0.0, value=float(t.entry), key=f"x_{t.id}")
+            if cols[2].button("Cerrar", key=f"c_{t.id}"):
+                journal.close(t.id, exit_p)
+                st.rerun()
+            if t.thesis:
+                cols[0].caption(f"Tesis: {t.thesis}")
+    else:
+        st.caption("No tienes operaciones abiertas.")
+
+    closed_t = journal.closed_trades()
+    st.markdown(f"#### Cerradas ({len(closed_t)})")
+    if closed_t:
+        rows = [{"Ticker": t.ticker, "Dir": "L" if t.direction > 0 else "C",
+                 "Entrada": t.entry, "Salida": t.exit, "R": t.r_multiple(),
+                 "P&L": t.pnl(), "P&L %": t.pnl_pct(),
+                 "Plan": "✅" if t.followed_plan() else "⚠️"} for t in closed_t]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    render_postmortem(journal.load())
+
+
+def render_postmortem(trades) -> None:
+    st.markdown("---")
+    st.subheader("🔬 Post-mortem (tu estadística)")
+    s = postmortem.summarize(trades)
+    if s.n == 0:
+        st.info(s.lessons[0])
+        return
+    cols = st.columns(5)
+    cols[0].metric("Operaciones", s.n)
+    cols[1].metric("Acierto", f"{s.win_rate*100:.0f}%")
+    cols[2].metric("Esperanza", f"{s.avg_r:+.2f}R")
+    pf = "∞" if s.profit_factor == float("inf") else f"{s.profit_factor:.2f}"
+    cols[3].metric("Profit factor", pf)
+    cols[4].metric("P&L total", f"{s.total_pnl:+.0f} €")
+    st.write("**Lecciones:**")
+    for lesson in s.lessons:
+        st.write(f"- {lesson}")
+    if s.by_horizon:
+        st.caption("R medio por horizonte: " + " · ".join(f"{h}: {r:+.2f}R" for h, r in s.by_horizon.items()))
+
+
+def mode_alerts() -> None:
+    st.subheader("🔔 Alertas")
+    st.caption("Reglas que se comprueban bajo demanda contra los datos actuales (sin coste, sin servicio en segundo plano).")
+
+    with st.expander("➕ Crear alerta"):
+        c = st.columns([2, 3, 2])
+        tk = c[0].text_input("Ticker", key="a_tk")
+        kind = c[1].selectbox("Condición", list(alerts.KINDS.keys()),
+                              format_func=lambda k: alerts.KINDS[k], key="a_kind")
+        value = c[2].number_input("Valor", value=100.0, key="a_val",
+                                  disabled=kind.startswith("cross"))
+        if st.button("Guardar alerta") and tk:
+            alerts.add(alerts.AlertRule(tk.strip().upper(), kind, float(value)))
+            st.success("Alerta creada.")
+            st.rerun()
+
+    rules = alerts.load()
+    if not rules:
+        st.caption("No tienes alertas. Crea una arriba.")
+        return
+
+    if st.button("🔍 Revisar alertas ahora", type="primary"):
+        with st.spinner("Comprobando…"):
+            hits = alerts.check_all(rules)
+        fired = [h for h in hits if h.triggered]
+        if fired:
+            st.success(f"🔔 {len(fired)} alerta(s) activada(s):")
+            for h in fired:
+                st.write(f"- **{h.message}**")
+        else:
+            st.info("Ninguna alerta activada por ahora.")
+        with st.expander("Ver estado de todas"):
+            for h in hits:
+                st.write(("🔔 " if h.triggered else "⚪ ") + h.message)
+
+    st.markdown("#### Alertas configuradas")
+    for r in rules:
+        cols = st.columns([5, 1])
+        cols[0].write(r.describe())
+        if cols[1].button("🗑️", key=f"del_{r.id}"):
+            alerts.remove(r.id)
+            st.rerun()
 
 
 def main() -> None:
@@ -257,11 +380,16 @@ def main() -> None:
     st.sidebar.markdown("---")
     st.sidebar.warning("⚠️ Herramienta de apoyo a la decisión, **no asesoramiento financiero**.")
 
-    tab_explore, tab_analyze = st.tabs(["🧭 Explorar (recomendador)", "🔬 Analizar (ficha)"])
+    tab_explore, tab_analyze, tab_journal, tab_alerts = st.tabs(
+        ["🧭 Explorar (recomendador)", "🔬 Analizar (ficha)", "📓 Diario", "🔔 Alertas"])
     with tab_explore:
         mode_explore(profile, capital)
     with tab_analyze:
         mode_analyze(profile, capital)
+    with tab_journal:
+        mode_journal()
+    with tab_alerts:
+        mode_alerts()
 
 
 if __name__ == "__main__":

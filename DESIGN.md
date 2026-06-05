@@ -91,5 +91,17 @@ ni slippage: es validación honesta, no un motor de trading profesional.
 - **Fase 2 (hecha):** niveles de soporte/resistencia automáticos (+ stops en
   estructura), VWAP en intraday, ruptura de soporte en cortos, watchlist propia
   persistente (universo en el screener) y exportación de resultados a CSV.
-- **Fase 3:** **diario de operaciones + post-mortem** (cerrar el bucle de
-  aprendizaje), alertas y backtest con costes/comisiones.
+- **Fase 3 (hecha):** **diario de operaciones + post-mortem** (cerrar el bucle de
+  aprendizaje), **alertas** bajo demanda y **backtest con comisiones**.
+
+### Detalle Fase 3
+
+- **Diario** (`journal.py`): registra cada operación con su *tesis*; al cerrarla
+  calcula P&L (neto de comisiones), R-múltiplo y si se respetó el plan.
+- **Post-mortem** (`postmortem.py`): win rate, esperanza en R, profit factor,
+  disciplina (% de planes respetados), R por horizonte y **lecciones** sobre los
+  propios errores.
+- **Alertas** (`alerts.py`): reglas (precio, RSI, cruce de SMA200) evaluadas bajo
+  demanda contra los datos actuales — sin servicio en segundo plano, coste cero.
+- **Backtest con comisiones**: descuento de ida y vuelta (5 pb por lado por
+  defecto) para un retorno más realista.

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from . import config
 from .indicators import technical
 from .profiles import StrategyProfile
 from .signals import horizons
@@ -35,12 +36,13 @@ def run(
     horizon_bars: int = 10,
     signal_threshold: float = 0.3,
     warmup: int = 200,
+    commission_pct: float = config.DEFAULT_COMMISSION,
 ) -> BacktestResult:
     """Evalúa la señal técnica del perfil sobre el histórico.
 
     En cada barra (tras el warmup) calcula el score técnico; si supera el umbral
     en la dirección del perfil, abre una operación virtual y mide el retorno a
-    `horizon_bars` barras vista.
+    `horizon_bars` barras vista, descontando comisiones de ida y vuelta.
     """
     if df is None or len(df) < warmup + horizon_bars + 5:
         return BacktestResult(0, 0.0, 0.0, 0.0, 0.0, horizon_bars, "Histórico insuficiente para backtest.")
@@ -59,7 +61,8 @@ def run(
             entry = close[i]
             exit_ = close[i + horizon_bars]
             if entry > 0:
-                ret = direction * (exit_ - entry) / entry
+                # Retorno neto: descuenta comisión de entrada y de salida.
+                ret = direction * (exit_ - entry) / entry - 2 * commission_pct
                 returns.append(ret)
 
     if not returns:

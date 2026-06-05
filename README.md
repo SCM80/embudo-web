@@ -29,6 +29,11 @@ lugar de creérselas a ciegas.
 - **VWAP** en intraday y detección de **ruptura de soporte** en cortos.
 - **⭐ Watchlist propia persistente** usable como universo en el screener.
 - **Exportación a CSV** de los resultados del recomendador.
+- **📓 Diario de operaciones + post-mortem**: registra trades con su tesis y
+  obtén tu estadística real (win rate, esperanza en R, profit factor, disciplina
+  y lecciones sobre tus errores).
+- **🔔 Alertas** bajo demanda (precio, RSI, cruce de SMA200), sin coste.
+- **Backtest con comisiones** para retornos más realistas.
 
 ## 🧱 Fuentes de datos (todas gratis, sin key)
 
@@ -70,9 +75,14 @@ embudo/
 ├── qualitative/  # Analistas + sentimiento (VADER)
 ├── consensus/    # Motor de consenso ponderado y honesto
 ├── regime.py     # Detector de régimen de mercado
-├── risk.py       # Stop / tamaño / R:R
-├── backtest.py   # Validación histórica de señales
+├── levels.py     # Soporte/resistencia automáticos
+├── risk.py       # Stop / tamaño / R:R (ATR o estructura)
+├── backtest.py   # Validación histórica de señales (con comisiones)
 ├── profiles.py   # Perfiles de estrategia (pesos + filtros)
 ├── screener/     # El recomendador que rankea universos
+├── watchlist.py  # Watchlist propia persistente
+├── journal.py    # Diario de operaciones
+├── postmortem.py # Estadística y lecciones del diario
+├── alerts.py     # Alertas bajo demanda
 └── analyzer.py   # Fachada de alto nivel
 ```
