@@ -50,3 +50,10 @@ CACHE_TTL_SECONDS = 60 * 30        # 30 min: equilibrio entre frescura y rate-li
 # Se puede activar desde la UI o con la variable de entorno EMBUDO_DEMO=1.
 import os as _os
 DEMO_MODE = _os.getenv("EMBUDO_DEMO", "").strip() in ("1", "true", "True")
+
+# --- Clave Finnhub (cotización EEUU en tiempo real) ---
+# Clave personal del usuario, incorporada a petición suya para uso propio.
+# Prioridad de uso: campo en la app > variable de entorno FINNHUB_KEY >
+# .streamlit/secrets.toml > este valor por defecto.
+# Para cambiarla/quitarla: edita esta línea o pon FINNHUB_KEY en el entorno.
+FINNHUB_KEY = _os.getenv("FINNHUB_KEY", "d8i8us9r01qm63ban52gd8i8us9r01qm63ban530")

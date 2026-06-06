@@ -40,6 +40,7 @@ def get_live_quote(ticker: str, finnhub_key: str | None = None) -> Quote:
         price, change = demo.demo_quote(ticker)
         return Quote(price, change, "demo (simulado)", _now(), delayed=False)
 
+    finnhub_key = finnhub_key or config.FINNHUB_KEY
     if finnhub_key and _is_us(ticker):
         q = _from_finnhub(ticker, finnhub_key)
         if q is not None:

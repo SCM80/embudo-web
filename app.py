@@ -21,7 +21,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from embudo import alerts, analyzer, config, journal, postmortem, watchlist
-from embudo.data import realtime
+from embudo.data import health, realtime
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS
 from embudo.screener import recommender
@@ -61,6 +61,23 @@ def human_num(n) -> str:
     return f"{n:.1f}P"
 
 
+def _default_finnhub_key() -> str:
+    """Clave Finnhub: variable de entorno > secrets.toml > valor en config."""
+    import os
+    try:
+        if "FINNHUB_KEY" in st.secrets:
+            return str(st.secrets["FINNHUB_KEY"])
+    except Exception:
+        pass
+    return os.getenv("FINNHUB_KEY") or config.FINNHUB_KEY
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def connectivity() -> bool:
+    """¿Hay conexión a datos reales de Yahoo? (cacheado 2 min)."""
+    return health.check_connectivity()
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_analyze(ticker: str, strategy_name: str, capital: float, demo: bool):
     """Análisis cacheado 5 min para no rehacer el trabajo pesado en cada refresco.
@@ -87,13 +104,25 @@ def sidebar() -> dict:
     market = st.sidebar.selectbox("Mercado", MARKETS)
     capital = st.sidebar.number_input("Capital (€)", min_value=100.0, value=10_000.0, step=500.0)
 
-    # Modo demo: datos simulados, funciona sin internet (y como fallback).
-    demo = st.sidebar.checkbox("🧪 Modo demo (datos simulados)", value=config.DEMO_MODE,
-                               help="Actívalo si no tienes internet o las fuentes fallan. "
-                                    "Los datos NO son reales.")
+    # Estado de conexión a datos reales.
+    with st.sidebar:
+        with st.spinner("Comprobando conexión a datos reales…"):
+            online = connectivity()
+    if online:
+        st.sidebar.success("🟢 Conectado a **datos reales** (Yahoo Finance)")
+    else:
+        st.sidebar.error("🔴 Sin conexión a datos reales — se usará modo demo")
+
+    # Modo demo: datos simulados. Por defecto OFF si hay internet; ON si no lo hay.
+    demo = st.sidebar.checkbox("🧪 Modo demo (datos simulados)",
+                               value=(config.DEMO_MODE or not online),
+                               help="Datos NO reales. Útil sin internet o si las fuentes fallan.")
     config.DEMO_MODE = demo
     if demo:
         st.sidebar.info("Modo demo activo: datos simulados, no reales.")
+    elif online:
+        st.sidebar.caption("Datos reales con ~15 min de retardo (gratis). "
+                           "Clave Finnhub abajo = cotización EEUU en tiempo real.")
 
     w = PRESETS[strategy].weights
     st.sidebar.caption(
@@ -107,8 +136,10 @@ def sidebar() -> dict:
                                help="Datos gratis de Yahoo con ~15 min de retardo.")
     interval = st.sidebar.select_slider("Cada", options=[15, 30, 60, 120], value=30,
                                         format_func=lambda s: f"{s}s", disabled=not auto)
-    finnhub_key = st.sidebar.text_input("Clave Finnhub (opcional, gratis)", type="password",
-                                        help="Mejora la cotización de EEUU. Sin ella se usa Yahoo.")
+    finnhub_key = st.sidebar.text_input(
+        "Clave Finnhub (tiempo real EEUU)", value=_default_finnhub_key(), type="password",
+        help="Cotización EEUU en tiempo real. Se carga de .streamlit/secrets.toml o "
+             "de la variable de entorno FINNHUB_KEY si existe.")
     if auto and st_autorefresh is not None:
         st_autorefresh(interval=interval * 1000, key="embudo_autorefresh")
     elif auto and st_autorefresh is None:
