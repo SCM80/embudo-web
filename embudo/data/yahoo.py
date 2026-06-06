@@ -66,7 +66,11 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_prices(ticker: str, period: str = "2y", interval: str = "1d", use_cache: bool = True) -> pd.DataFrame:
-    """Descarga OHLCV. Intenta Yahoo y, para datos diarios, cae a Stooq si falla."""
+    """Descarga OHLCV. Modo demo si está activo; si no, Yahoo y, para diario, Stooq."""
+    if config.DEMO_MODE:
+        from . import demo
+        return _normalize(demo.demo_prices(ticker, period, interval))
+
     key = f"{ticker}_{period}_{interval}"
     if use_cache:
         cached = _read_cache(key)
@@ -130,6 +134,9 @@ def get_fundamentals(ticker: str) -> dict:
         # KPIs de cabecera
         "market_cap": None, "fifty_two_high": None, "fifty_two_low": None, "beta": None,
     }
+    if config.DEMO_MODE:
+        from . import demo
+        return demo.demo_fundamentals(ticker)
     try:
         import yfinance as yf
 

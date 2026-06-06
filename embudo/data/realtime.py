@@ -34,6 +34,12 @@ def _is_us(ticker: str) -> bool:
 
 def get_live_quote(ticker: str, finnhub_key: str | None = None) -> Quote:
     """Devuelve la cotización más fresca disponible para el ticker."""
+    from .. import config
+    if config.DEMO_MODE:
+        from . import demo
+        price, change = demo.demo_quote(ticker)
+        return Quote(price, change, "demo (simulado)", _now(), delayed=False)
+
     if finnhub_key and _is_us(ticker):
         q = _from_finnhub(ticker, finnhub_key)
         if q is not None:

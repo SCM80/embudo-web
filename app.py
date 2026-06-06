@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from embudo import alerts, analyzer, journal, postmortem, watchlist
+from embudo import alerts, analyzer, config, journal, postmortem, watchlist
 from embudo.data import realtime
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS
@@ -62,13 +62,16 @@ def human_num(n) -> str:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def cached_analyze(ticker: str, strategy_name: str, capital: float):
-    """Análisis cacheado 5 min para no rehacer el trabajo pesado en cada refresco."""
+def cached_analyze(ticker: str, strategy_name: str, capital: float, demo: bool):
+    """Análisis cacheado 5 min para no rehacer el trabajo pesado en cada refresco.
+
+    `demo` entra en la clave de caché para no mezclar datos reales y simulados.
+    """
     return analyzer.analyze(ticker, PRESETS[strategy_name], capital=capital)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def cached_screen(market: str, strategy_name: str, capital: float):
+def cached_screen(market: str, strategy_name: str, capital: float, demo: bool):
     profile = PRESETS[strategy_name]
     if market == WATCHLIST_NAME:
         return recommender.screen(watchlist.load(), profile, capital=capital), None
@@ -83,6 +86,14 @@ def sidebar() -> dict:
                                     help="Calidad/Valor (Buffett), seguir volumen, intraday o corto.")
     market = st.sidebar.selectbox("Mercado", MARKETS)
     capital = st.sidebar.number_input("Capital (€)", min_value=100.0, value=10_000.0, step=500.0)
+
+    # Modo demo: datos simulados, funciona sin internet (y como fallback).
+    demo = st.sidebar.checkbox("🧪 Modo demo (datos simulados)", value=config.DEMO_MODE,
+                               help="Actívalo si no tienes internet o las fuentes fallan. "
+                                    "Los datos NO son reales.")
+    config.DEMO_MODE = demo
+    if demo:
+        st.sidebar.info("Modo demo activo: datos simulados, no reales.")
 
     w = PRESETS[strategy].weights
     st.sidebar.caption(
@@ -107,7 +118,7 @@ def sidebar() -> dict:
     st.sidebar.markdown("---")
     st.sidebar.warning("⚠️ Apoyo a la decisión, **no asesoramiento financiero**.")
     return {"strategy": strategy, "market": market, "capital": capital,
-            "finnhub_key": finnhub_key.strip() or None}
+            "finnhub_key": finnhub_key.strip() or None, "demo": demo}
 
 
 def _sidebar_watchlist() -> None:
@@ -304,10 +315,11 @@ def tab_recomendador(cfg: dict) -> None:
 
     if st.session_state.get("scanned"):
         with st.spinner("Escaneando mercado…"):
-            df, regime = cached_screen(cfg["market"], cfg["strategy"], cfg["capital"])
+            df, regime = cached_screen(cfg["market"], cfg["strategy"], cfg["capital"], cfg["demo"])
         render_regime(regime)
         if df.empty:
-            st.warning("Ningún valor pasó los filtros (o sin datos). Prueba otro mercado/estrategia.")
+            st.warning("Sin resultados. Puede ser falta de datos/conexión: activa el "
+                       "**🧪 Modo demo** en la barra lateral o revisa tu internet.")
             return
         accion = "compras" if PRESETS[cfg["strategy"]].direction > 0 else "ventas/cortos"
         st.success(f"Top candidatos ({accion}):")
@@ -323,7 +335,7 @@ def tab_recomendador(cfg: dict) -> None:
         choice = st.selectbox("📄 Ver ficha de:", tickers, key="ficha_choice")
         if choice:
             with st.spinner(f"Analizando {choice}…"):
-                a = cached_analyze(choice, cfg["strategy"], cfg["capital"])
+                a = cached_analyze(choice, cfg["strategy"], cfg["capital"], cfg["demo"])
             render_analysis(a, cfg["finnhub_key"])
 
     st.markdown("---")
@@ -331,7 +343,7 @@ def tab_recomendador(cfg: dict) -> None:
         manual = st.text_input("Ticker (Yahoo)", placeholder="AAPL, ITX.MC, SAN.MC…", key="manual_tk")
         if manual:
             with st.spinner(f"Analizando {manual}…"):
-                a = cached_analyze(manual.strip().upper(), cfg["strategy"], cfg["capital"])
+                a = cached_analyze(manual.strip().upper(), cfg["strategy"], cfg["capital"], cfg["demo"])
             render_analysis(a, cfg["finnhub_key"])
 
 

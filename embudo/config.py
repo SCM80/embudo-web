@@ -45,3 +45,8 @@ DEFAULT_COMMISSION = 0.0005        # 5 pb por lado (comisión + slippage estimad
 # --- Caché de datos ---
 CACHE_DIR = ".embudo_cache"
 CACHE_TTL_SECONDS = 60 * 30        # 30 min: equilibrio entre frescura y rate-limit
+
+# --- Modo demo (datos simulados, sin red) ---
+# Se puede activar desde la UI o con la variable de entorno EMBUDO_DEMO=1.
+import os as _os
+DEMO_MODE = _os.getenv("EMBUDO_DEMO", "").strip() in ("1", "true", "True")

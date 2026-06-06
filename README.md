@@ -56,6 +56,13 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+### 🧪 Modo demo (sin internet)
+
+Si no tienes conexión o las fuentes gratuitas fallan/limitan, activa **"🧪 Modo
+demo (datos simulados)"** en la barra lateral (o arranca con `EMBUDO_DEMO=1
+streamlit run app.py`). La app funciona al 100% con **datos simulados realistas**
+(no reales) — ideal para probar la interfaz en cualquier sitio.
+
 Abre el navegador en la URL que indica Streamlit (por defecto
 `http://localhost:8501`).
 
