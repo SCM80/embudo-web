@@ -124,10 +124,12 @@ def sidebar() -> dict:
         st.sidebar.caption("Datos reales con ~15 min de retardo (gratis). "
                            "Clave Finnhub abajo = cotización EEUU en tiempo real.")
 
-    w = PRESETS[strategy].weights
+    w = config.OBJECTIVE_WEIGHTS
     st.sidebar.caption(
-        f"Pesos → Téc {w['tecnico']*100:.0f}% · Fund {w['fundamental']*100:.0f}% · "
-        f"Anal {w['analistas']*100:.0f}% · Notic {w['sentimiento']*100:.0f}%"
+        f"Análisis objetivo (igual en todas las estrategias) → "
+        f"Téc {w['tecnico']*100:.0f}% · Fund {w['fundamental']*100:.0f}% · "
+        f"Anal {w['analistas']*100:.0f}% · Notic {w['sentimiento']*100:.0f}%. "
+        f"La estrategia solo decide largo/corto y el plan."
     )
 
     st.sidebar.markdown("---")
@@ -266,7 +268,8 @@ def _signal_table(signals) -> pd.DataFrame:
          "Motivo": s.reason} for s in signals])
 
 
-def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None) -> None:
+def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
+                    strategy_name: str = "") -> None:
     if a.error:
         st.error(a.error)
         return
@@ -275,69 +278,28 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None) -> Non
     st.markdown(f"### {a.name}  ·  `{a.ticker}`")
     quote = kpi_header(a, finnhub_key)
 
-    # 🚦 Decisor fácil: veredicto de una frase.
-    p = a.trade_plan
-    profit_pct = (p.reward_per_share / p.entry * 100) if (p and p.entry) else None
-    rr = p.reward_risk if p else None
-    v = decision.decide(cons.score, a.profile.direction, profit_pct, rr, cons.confidence)
-    bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828"}[v.color]
-    st.markdown(
-        f"<div style='background:{bg};color:white;padding:16px 20px;border-radius:10px;margin-bottom:6px'>"
-        f"<span style='font-size:1.5rem;font-weight:800'>{v.emoji} {v.action}</span>"
-        f"<div style='font-size:1rem;margin-top:4px'>{v.phrase}</div></div>",
-        unsafe_allow_html=True,
-    )
-
+    # ============ ANÁLISIS OBJETIVO (igual sea cual sea la estrategia) ============
+    st.markdown("#### 📊 Análisis objetivo del valor")
+    st.caption("Este análisis es el **mismo para cualquier estrategia**: valora el activo de "
+               "forma objetiva. La estrategia solo decide, más abajo, si te encaja.")
     label_badge(cons.label, cons.score, cons.confidence)
     if cons.conflict:
         st.warning(cons.conflict)
     if cons.regime_note:
         st.caption(cons.regime_note)
 
-    # Desglose por dimensión (4).
     cols = st.columns(4)
-    for col, (k, v) in zip(cols, cons.dimension_scores.items()):
-        col.metric(DIM_NAMES.get(k, k), f"{v:+.2f}")
+    for col, (k, val) in zip(cols, cons.dimension_scores.items()):
+        col.metric(DIM_NAMES.get(k, k), f"{val:+.2f}")
 
-    show_vwap = a.profile.horizon is Horizon.INTRADAY
     live = quote.price if (quote and not config.DEMO_MODE) else None
-    st.plotly_chart(price_chart(a.df, a.name, levels=a.levels, show_vwap=show_vwap, live_price=live),
+    st.plotly_chart(price_chart(a.df, a.name, levels=a.levels, live_price=live),
                     use_container_width=True)
     if a.levels:
         st.caption("**Niveles automáticos:** " + " · ".join(
             f"{lv.kind} {lv.price:.2f} ({lv.strength})" for lv in a.levels))
 
-    # Aviso de alineación: ¿la señal encaja con la estrategia elegida?
-    strat_dir = a.profile.direction
-    if strat_dir < 0 and cons.score > 0.15:
-        st.warning("⚠️ Estrategia de **corto**, pero este valor **no muestra debilidad** "
-                   "(la señal es alcista). No es un buen candidato para ponerse corto.")
-    elif strat_dir > 0 and cons.score < -0.15:
-        st.warning("⚠️ Estrategia de **compra**, pero la señal es **bajista**. "
-                   "No es un buen candidato para comprar.")
-
-    # Recomendación de precio / entrada-salida.
-    sentido = "🔻 CORTO (ganas si baja)" if strat_dir < 0 else "🔼 LARGO (ganas si sube)"
-    st.subheader(f"🎯 Recomendación de precio · {sentido}")
-    if a.trade_plan:
-        p = a.trade_plan
-        profit_pct = p.reward_per_share / p.entry * 100 if p.entry else 0.0
-        cols = st.columns(6)
-        cols[0].metric("Entrada", f"{p.entry:.2f}")
-        cols[1].metric("Stop", f"{p.stop:.2f}")
-        cols[2].metric("Objetivo", f"{p.target:.2f}")
-        cols[3].metric("💰 Profit objetivo", f"+{profit_pct:.1f}%")
-        cols[4].metric("R:R", f"{p.reward_risk:.1f}")
-        cols[5].metric("Acciones", f"{p.shares}")
-        st.caption(p.detail)
-        if strat_dir < 0:
-            st.caption("En corto: entras vendiendo a la *entrada*, el *stop* está por **encima** "
-                       "(pérdida si sube) y el *objetivo* por **debajo** (beneficio si baja).")
-    else:
-        st.caption("Sin datos suficientes para el plan de entrada/salida.")
-
-    # Los porqués: técnico + fundamental + cualitativo.
-    st.subheader("🔍 Por qué (el razonamiento)")
+    st.markdown("##### 🔍 Por qué (el razonamiento)")
     lcol, rcol = st.columns(2)
     with lcol:
         st.markdown("**📈 Técnico**")
@@ -359,23 +321,55 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None) -> Non
             for h, s in cons.sentiment.headlines[:6]:
                 emoji = "🟢" if s > 0.05 else "🔴" if s < -0.05 else "⚪"
                 st.caption(f"{emoji} {h}")
-        st.markdown("**🧪 Backtest de la señal**")
-        if a.backtest and a.backtest.n_signals > 0:
-            bt = a.backtest
-            st.write(f"Acierto histórico **{bt.win_rate*100:.0f}%** · retorno medio "
-                     f"**{bt.avg_return*100:+.2f}%** ({bt.n_signals} señales).")
-        else:
-            st.caption(a.backtest.detail if a.backtest else "Backtest no disponible.")
 
-    # Anotar en el diario (funciona porque la ficha se renderiza en cada rerun).
-    if a.trade_plan:
-        p = a.trade_plan
-        if st.button("📓 Anotar este plan en el diario", key=f"jadd_{a.ticker}"):
-            journal.add(journal.Trade(
-                ticker=a.ticker, direction=p.direction, entry=p.entry, stop=p.stop,
-                target=p.target, shares=p.shares, horizon=a.profile.horizon.value,
-                thesis=f"{cons.label} (score {cons.score:+.2f}, conf {cons.confidence*100:.0f}%)"))
-            st.success("Operación añadida al diario (pestaña 📓 Diario).")
+    # ================= PARA TU ESTRATEGIA (depende de largo/corto) =================
+    strat_dir = a.profile.direction
+    p = a.trade_plan
+    profit_pct = (p.reward_per_share / p.entry * 100) if (p and p.entry) else None
+    rr = p.reward_risk if p else None
+
+    st.markdown("---")
+    st.markdown(f"#### 🎯 Para tu estrategia: **{strategy_name or a.profile.horizon.value}**")
+
+    v = decision.decide(cons.score, strat_dir, profit_pct, rr, cons.confidence)
+    bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828"}[v.color]
+    st.markdown(
+        f"<div style='background:{bg};color:white;padding:16px 20px;border-radius:10px;margin-bottom:6px'>"
+        f"<span style='font-size:1.5rem;font-weight:800'>{v.emoji} {v.action}</span>"
+        f"<div style='font-size:1rem;margin-top:4px'>{v.phrase}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    sentido = "🔻 CORTO (ganas si baja)" if strat_dir < 0 else "🔼 LARGO (ganas si sube)"
+    st.markdown(f"**Plan de precio · {sentido}**")
+    if p:
+        cols = st.columns(6)
+        cols[0].metric("Entrada", f"{p.entry:.2f}")
+        cols[1].metric("Stop", f"{p.stop:.2f}")
+        cols[2].metric("Objetivo", f"{p.target:.2f}")
+        cols[3].metric("💰 Profit objetivo", f"+{profit_pct:.1f}%")
+        cols[4].metric("R:R", f"{p.reward_risk:.1f}")
+        cols[5].metric("Acciones", f"{p.shares}")
+        st.caption(p.detail)
+        if strat_dir < 0:
+            st.caption("En corto: entras vendiendo a la *entrada*, el *stop* está por **encima** "
+                       "(pérdida si sube) y el *objetivo* por **debajo** (beneficio si baja).")
+    else:
+        st.caption("Sin datos suficientes para el plan de entrada/salida.")
+
+    if a.backtest and a.backtest.n_signals > 0:
+        bt = a.backtest
+        st.caption(f"🧪 Backtest de la señal de esta estrategia: acierto **{bt.win_rate*100:.0f}%** · "
+                   f"retorno medio **{bt.avg_return*100:+.2f}%** ({bt.n_signals} señales).")
+    elif a.backtest:
+        st.caption("🧪 " + a.backtest.detail)
+
+    if p and st.button("📓 Anotar este plan en el diario", key=f"jadd_{a.ticker}"):
+        journal.add(journal.Trade(
+            ticker=a.ticker, direction=p.direction, entry=p.entry, stop=p.stop,
+            target=p.target, shares=p.shares, horizon=a.profile.horizon.value,
+            thesis=f"{cons.label} (score {cons.score:+.2f}, conf {cons.confidence*100:.0f}%)"))
+        st.success("Operación añadida al diario (pestaña 📓 Diario).")
 
 
 # ----------------------------- pestañas -----------------------------------
@@ -441,7 +435,7 @@ def tab_recomendador(cfg: dict) -> None:
         if choice:
             with st.spinner(f"Analizando {choice}…"):
                 a = cached_analyze(choice, cfg["strategy"], cfg["capital"], cfg["demo"])
-            render_analysis(a, cfg["finnhub_key"])
+            render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
 
     st.markdown("---")
     with st.expander("🔬 Analizar otro valor por ticker"):
@@ -449,7 +443,7 @@ def tab_recomendador(cfg: dict) -> None:
         if manual:
             with st.spinner(f"Analizando {manual}…"):
                 a = cached_analyze(manual.strip().upper(), cfg["strategy"], cfg["capital"], cfg["demo"])
-            render_analysis(a, cfg["finnhub_key"])
+            render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
 
 
 def tab_diario() -> None:

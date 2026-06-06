@@ -20,6 +20,7 @@ from ..qualitative.sentiment import SentimentView
 from ..regime import Regime
 from ..signals import horizons
 from ..signals.base import Signal, SignalGroup
+from ..signals.horizons import Horizon
 
 
 @dataclass
@@ -65,16 +66,22 @@ def _confidence(dim_scores: dict[str, float], weights: dict[str, float]) -> tupl
 
 def evaluate(
     df: pd.DataFrame,
-    profile: StrategyProfile,
+    profile: StrategyProfile | None = None,
     analyst_view: AnalystView | None = None,
     sentiment_view: SentimentView | None = None,
     fundamental_view: FundamentalView | None = None,
     regime: Regime | None = None,
 ) -> Consensus:
-    """Calcula el consenso para un valor dado un perfil de estrategia."""
-    weights = profile.weights
+    """Análisis OBJETIVO de un valor: idéntico sea cual sea la estrategia.
 
-    tech_group = horizons.evaluate(df, profile.horizon, volume_emphasis=profile.volume_emphasis)
+    Usa pesos fijos (config.OBJECTIVE_WEIGHTS) y una evaluación técnica canónica
+    (diaria, sin sesgo por horizonte ni énfasis de volumen). El `profile` se
+    acepta por compatibilidad pero NO altera el score: la estrategia solo decide,
+    fuera de aquí, si este análisis encaja contigo (largo/corto y plan).
+    """
+    weights = dict(config.OBJECTIVE_WEIGHTS)
+
+    tech_group = horizons.evaluate(df, Horizon.LARGO, volume_emphasis=False)
     tech_score = tech_group.score
 
     analyst_view = analyst_view or analysts.from_mean(None)

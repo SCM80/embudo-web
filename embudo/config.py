@@ -51,6 +51,12 @@ CACHE_TTL_SECONDS = 60 * 30        # 30 min: equilibrio entre frescura y rate-li
 import os as _os
 DEMO_MODE = _os.getenv("EMBUDO_DEMO", "").strip() in ("1", "true", "True")
 
+# --- Pesos del análisis OBJETIVO (iguales para TODAS las estrategias) ---
+# Decisión de integridad: el análisis de un valor es siempre el mismo y objetivo.
+# La estrategia NO altera estos pesos ni el score; solo decide si ese análisis
+# encaja con lo que buscas (largo/corto) y el plan de trade.
+OBJECTIVE_WEIGHTS = {"tecnico": 0.40, "fundamental": 0.30, "analistas": 0.20, "sentimiento": 0.10}
+
 # --- Clave Finnhub (cotización EEUU en tiempo real) ---
 # Clave personal del usuario, incorporada a petición suya para uso propio.
 # Prioridad de uso: campo en la app > variable de entorno FINNHUB_KEY >
