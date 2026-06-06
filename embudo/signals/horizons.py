@@ -65,13 +65,21 @@ def _support_breakdown(df: pd.DataFrame, lookback: int = 60) -> Signal | None:
     return None
 
 
-def evaluate(df: pd.DataFrame, horizon: Horizon) -> SignalGroup:
-    """Construye el grupo técnico para el horizonte indicado."""
+def evaluate(df: pd.DataFrame, horizon: Horizon, volume_emphasis: bool = False) -> SignalGroup:
+    """Construye el grupo técnico para el horizonte indicado.
+
+    `volume_emphasis` (estrategia "seguir el dinero") sube el peso de las señales
+    de volumen para priorizar el rastro del capital institucional.
+    """
     group = SignalGroup(f"Técnico · {horizon.value}")
 
     # Base común: tendencia + volumen (con pesos según horizonte).
     trend_group = trend.evaluate(df)
     volume_group = volume.evaluate(df)
+
+    if volume_emphasis:
+        for s in volume_group.signals:
+            s.weight *= 1.8  # priorizar el rastro del dinero (volumen/OBV/divergencias)
 
     if horizon is Horizon.LARGO:
         for s in trend_group.signals:

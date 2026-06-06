@@ -116,8 +116,20 @@ def _from_stooq(ticker: str) -> pd.DataFrame | None:
 
 
 def get_fundamentals(ticker: str) -> dict:
-    """Datos cualitativos de Yahoo: media de recomendación de analistas y noticias."""
-    out = {"recommendation_mean": None, "num_analysts": 0, "headlines": [], "name": ticker}
+    """Datos cualitativos y fundamentales de Yahoo: analistas, noticias, calidad/valor.
+
+    Todos los campos pueden venir vacíos según el activo; los consumidores deben
+    degradar con elegancia (peso 0) cuando falten.
+    """
+    out = {
+        "recommendation_mean": None, "num_analysts": 0, "headlines": [], "name": ticker,
+        # Fundamentales (Buffett: calidad/valor)
+        "roe": None, "debt_to_equity": None, "profit_margins": None,
+        "trailing_pe": None, "forward_pe": None,
+        "revenue_growth": None, "earnings_growth": None,
+        # KPIs de cabecera
+        "market_cap": None, "fifty_two_high": None, "fifty_two_low": None, "beta": None,
+    }
     try:
         import yfinance as yf
 
@@ -129,6 +141,19 @@ def get_fundamentals(ticker: str) -> dict:
         out["recommendation_mean"] = info.get("recommendationMean")
         out["num_analysts"] = info.get("numberOfAnalystOpinions", 0) or 0
         out["name"] = info.get("shortName") or info.get("longName") or ticker
+        # Fundamentales
+        out["roe"] = info.get("returnOnEquity")
+        out["debt_to_equity"] = info.get("debtToEquity")
+        out["profit_margins"] = info.get("profitMargins")
+        out["trailing_pe"] = info.get("trailingPE")
+        out["forward_pe"] = info.get("forwardPE")
+        out["revenue_growth"] = info.get("revenueGrowth")
+        out["earnings_growth"] = info.get("earningsGrowth")
+        # KPIs
+        out["market_cap"] = info.get("marketCap")
+        out["fifty_two_high"] = info.get("fiftyTwoWeekHigh")
+        out["fifty_two_low"] = info.get("fiftyTwoWeekLow")
+        out["beta"] = info.get("beta")
 
         try:
             news = tk.news or []

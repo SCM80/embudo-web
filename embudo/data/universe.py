@@ -24,9 +24,27 @@ DOW30 = [
 # "Magnificent 7" para pruebas rápidas.
 MAG7 = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]
 
+# Nasdaq 100 (tecnología y growth USA).
+NASDAQ100 = [
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "TSLA", "AVGO", "PEP",
+    "COST", "ADBE", "CSCO", "NFLX", "AMD", "TMUS", "INTC", "CMCSA", "QCOM", "INTU",
+    "AMGN", "TXN", "HON", "AMAT", "BKNG", "ISRG", "VRTX", "ADP", "REGN", "GILD",
+    "MU", "LRCX", "PANW", "SBUX", "MDLZ", "ADI", "PYPL", "KLAC", "SNPS", "CDNS",
+    "MELI", "MAR", "ASML", "ABNB", "CRWD", "ORLY", "CTAS", "NXPI", "PCAR", "MNST",
+    "WDAY", "FTNT", "PAYX", "ODP", "CPRT", "ROST", "DXCM", "KDP", "IDXX", "FAST",
+    "EA", "VRSK", "EXC", "CSGP", "CCEP", "KHC", "BKR", "XEL", "CTSH", "DDOG",
+    "ON", "ANSS", "TTD", "GEHC", "BIIB", "MRVL", "DLTR", "WBD", "CDW", "FANG",
+    "TEAM", "ZS", "ADSK", "GFS", "ILMN", "MCHP", "LULU", "PDD", "ROP", "AEP",
+    "CEG", "SIRI", "WBA", "TTWO", "MRNA", "DASH", "SMCI", "ARM", "LIN", "TER",
+]
+
+# Combinado EEUU (Nasdaq 100 + Dow 30, sin duplicados, preservando orden).
+US_LARGE = list(dict.fromkeys(NASDAQ100 + DOW30))
+
 UNIVERSES: dict[str, list[str]] = {
     "Magnificent 7 (rápido)": MAG7,
     "IBEX 35": IBEX35,
+    "EEUU (Nasdaq 100 + Dow 30)": US_LARGE,
     "Dow Jones 30": DOW30,
 }
 
@@ -34,5 +52,6 @@ UNIVERSES: dict[str, list[str]] = {
 REGIME_INDEX = {
     "Magnificent 7 (rápido)": "^GSPC",
     "IBEX 35": "^IBEX",
+    "EEUU (Nasdaq 100 + Dow 30)": "^NDX",
     "Dow Jones 30": "^DJI",
 }

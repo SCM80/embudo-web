@@ -93,6 +93,26 @@ ni slippage: es validación honesta, no un motor de trading profesional.
   persistente (universo en el screener) y exportación de resultados a CSV.
 - **Fase 3 (hecha):** **diario de operaciones + post-mortem** (cerrar el bucle de
   aprendizaje), **alertas** bajo demanda y **backtest con comisiones**.
+- **v3 (hecha):** recomendador **estrategia-first** (4 estrategias) acotado a
+  **IBEX + EEUU (Nasdaq 100 + Dow 30)**, **capa fundamental (Buffett)**,
+  cabecera de **KPIs**, cotización **casi-real** (auto-refresco + clave Finnhub
+  opcional) y ficha con porqués técnico + fundamental + analistas + noticias.
+
+### Detalle v3
+- `qualitative/fundamentals.py`: score de calidad/valor (ROE, deuda, márgenes,
+  PER vs crecimiento) con sub-señales explicadas; degrada con peso 0 sin datos.
+- `data/realtime.py`: `get_live_quote()` → Finnhub (clave gratis opcional) o
+  Yahoo `fast_info` con sello de hora y aviso de retardo.
+- `data/universe.py`: añadidos `NASDAQ100` y "EEUU (Nasdaq 100 + Dow 30)".
+- `profiles.py`: 4 presets con pesos explícitos sobre {tecnico, fundamental,
+  analistas, sentimiento}; `volume_emphasis` para "Seguir volumen/momentum".
+- `consensus/engine.py`: nueva dimensión **fundamental** (mantiene confianza y
+  aviso de desacuerdo).
+- `app.py`: flujo estrategia → lista → ficha; KPIs; auto-refresco opcional.
+
+### Fuera de alcance (decidido con el usuario)
+- Sentimiento de redes sociales (cobertura nula en IBEX; descartado).
+- Tiempo real de pago, ejecución de órdenes o conexión con bróker.
 
 ### Detalle Fase 3
 

@@ -13,8 +13,9 @@ import pandas as pd
 
 from .. import config
 from ..profiles import StrategyProfile
-from ..qualitative import analysts, sentiment
+from ..qualitative import analysts, fundamentals, sentiment
 from ..qualitative.analysts import AnalystView
+from ..qualitative.fundamentals import FundamentalView
 from ..qualitative.sentiment import SentimentView
 from ..regime import Regime
 from ..signals import horizons
@@ -28,6 +29,7 @@ class Consensus:
     confidence: float             # [0, 1] acuerdo entre fuentes
     dimension_scores: dict[str, float] = field(default_factory=dict)
     technical: SignalGroup | None = None
+    fundamental: FundamentalView | None = None
     analyst: AnalystView | None = None
     sentiment: SentimentView | None = None
     conflict: str | None = None   # aviso si las dimensiones se contradicen
@@ -66,34 +68,40 @@ def evaluate(
     profile: StrategyProfile,
     analyst_view: AnalystView | None = None,
     sentiment_view: SentimentView | None = None,
+    fundamental_view: FundamentalView | None = None,
     regime: Regime | None = None,
 ) -> Consensus:
     """Calcula el consenso para un valor dado un perfil de estrategia."""
     weights = profile.weights
 
-    tech_group = horizons.evaluate(df, profile.horizon)
+    tech_group = horizons.evaluate(df, profile.horizon, volume_emphasis=profile.volume_emphasis)
     tech_score = tech_group.score
 
     analyst_view = analyst_view or analysts.from_mean(None)
     sentiment_view = sentiment_view or sentiment.analyze([])
+    fundamental_view = fundamental_view or fundamentals.evaluate(None)
     analyst_sig = analysts.to_signal(analyst_view)
     sentiment_sig = sentiment.to_signal(sentiment_view)
+    fundamental_sig = fundamentals.to_signal(fundamental_view)
 
     dim_scores = {
         "tecnico": tech_score,
+        "fundamental": fundamental_view.score if fundamental_sig.weight > 0 else 0.0,
         "analistas": analyst_view.score if analyst_sig.weight > 0 else 0.0,
         "sentimiento": sentiment_view.score if sentiment_sig.weight > 0 else 0.0,
     }
 
     # Solo cuentan las dimensiones con datos reales (degradación elegante).
     eff_weights = dict(weights)
+    if fundamental_sig.weight == 0:
+        eff_weights["fundamental"] = 0.0
     if analyst_sig.weight == 0:
         eff_weights["analistas"] = 0.0
     if sentiment_sig.weight == 0:
         eff_weights["sentimiento"] = 0.0
     total_w = sum(eff_weights.values()) or 1.0
 
-    combined = sum(dim_scores[k] * eff_weights[k] for k in dim_scores) / total_w
+    combined = sum(dim_scores[k] * eff_weights.get(k, 0.0) for k in dim_scores) / total_w
 
     regime_note = None
     if regime is not None:
@@ -111,6 +119,7 @@ def evaluate(
         confidence=confidence,
         dimension_scores={k: round(v, 3) for k, v in dim_scores.items()},
         technical=tech_group,
+        fundamental=fundamental_view,
         analyst=analyst_view,
         sentiment=sentiment_view,
         conflict=conflict,

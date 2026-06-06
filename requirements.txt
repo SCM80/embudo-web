@@ -1,5 +1,6 @@
 # Embudo — dependencias (todo gratuito, sin API keys de pago)
 streamlit>=1.33
+streamlit-autorefresh>=1.0.1   # auto-refresco "casi real" del dashboard
 pandas>=2.0
 numpy>=1.24
 plotly>=5.20

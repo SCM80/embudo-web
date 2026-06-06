@@ -17,7 +17,7 @@ from .data import yahoo
 from .indicators import technical
 from .levels import Level
 from .profiles import StrategyProfile
-from .qualitative import analysts, sentiment
+from .qualitative import analysts, fundamentals, sentiment
 from .regime import Regime
 
 
@@ -31,6 +31,7 @@ class Analysis:
     trade_plan: risk.TradePlan | None
     backtest: backtest.BacktestResult | None
     levels: list[Level] = field(default_factory=list)
+    fundamentals: dict = field(default_factory=dict)   # KPIs crudos para la cabecera
     error: str | None = None
 
     @property
@@ -58,14 +59,17 @@ def analyze(
 
     analyst_view = analysts.from_mean(None)
     sentiment_view = sentiment.analyze([])
+    fundamental_view = fundamentals.evaluate(None)
     name = ticker
+    fund: dict = {}
     if with_qualitative:
         fund = yahoo.get_fundamentals(ticker)
         name = fund.get("name", ticker)
         analyst_view = analysts.from_mean(fund.get("recommendation_mean"), fund.get("num_analysts", 0))
         sentiment_view = sentiment.analyze(fund.get("headlines", []))
+        fundamental_view = fundamentals.evaluate(fund)
 
-    cons = engine.evaluate(df, profile, analyst_view, sentiment_view, regime)
+    cons = engine.evaluate(df, profile, analyst_view, sentiment_view, fundamental_view, regime)
 
     # Niveles de soporte/resistencia para gráfico y para anclar el riesgo.
     sr_levels = levels_mod.detect(raw)
@@ -90,7 +94,7 @@ def analyze(
 
     bt = backtest.run(raw, profile) if with_backtest else None
 
-    return Analysis(ticker, name, profile, df, cons, plan, bt, levels=sr_levels)
+    return Analysis(ticker, name, profile, df, cons, plan, bt, levels=sr_levels, fundamentals=fund)
 
 
 def _empty_consensus() -> Consensus:

@@ -11,8 +11,16 @@ lugar de creérselas a ciegas.
 
 ## ✨ Qué hace
 
-- **🧭 Explorar (recomendador):** escanea un universo (IBEX 35, Dow 30, Mag 7) y
-  **rankea los mejores candidatos según tu estrategia**.
+- **🧭 Recomendador estrategia-first:** eliges **1 de 4 estrategias** y un
+  **mercado (IBEX 35 / EEUU Nasdaq 100 + Dow 30 / tu watchlist)**, y Embudo
+  **filtra y rankea** las acciones recomendadas. Pinchas una y ves su ficha.
+- **4 estrategias:** Calidad/Valor (Buffett), Seguir volumen/momentum, Intraday
+  técnico y Posicionarse a corto/bajista.
+- **🏛️ Capa fundamental (Buffett):** ROE, deuda, márgenes, PER vs crecimiento.
+- **⏱️ Casi tiempo real:** auto-refresco configurable (datos Yahoo con ~15 min de
+  retardo) y **clave Finnhub opcional y gratuita** para cotización EEUU más fresca.
+- **KPIs** sobre el gráfico: precio y cambio %, capitalización, PER, ROE, rango
+  52 semanas y volumen relativo.
 - **🔬 Analizar (ficha):** análisis completo de un valor con señales
   **explicadas** (el *por qué*, no solo el *qué*).
 - **Selector de estrategia en dos ejes:**
@@ -72,7 +80,7 @@ embudo/
 ├── data/         # Yahoo + caché + fallback Stooq + universos
 ├── indicators/   # Indicadores técnicos (pandas/numpy puro)
 ├── signals/      # Tendencia, volumen y reglas por horizonte
-├── qualitative/  # Analistas + sentimiento (VADER)
+├── qualitative/  # Analistas + sentimiento (VADER) + fundamentales (Buffett)
 ├── consensus/    # Motor de consenso ponderado y honesto
 ├── regime.py     # Detector de régimen de mercado
 ├── levels.py     # Soporte/resistencia automáticos
