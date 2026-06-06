@@ -74,10 +74,12 @@ def analyze(
     # Niveles de soporte/resistencia para gráfico y para anclar el riesgo.
     sr_levels = levels_mod.detect(raw)
 
-    # Plan de riesgo en la dirección de la señal (o la del perfil para cortos).
+    # El plan SIEMPRE sigue la dirección de la estrategia elegida:
+    # estrategia de corto -> plan bajista (objetivo por DEBAJO de la entrada);
+    # estrategias largas -> plan alcista. Así no se mezcla "corto" con objetivo al alza.
     atr = float(df["atr"].iloc[-1]) if not df["atr"].dropna().empty else 0.0
     entry = float(df["Close"].iloc[-1])
-    plan_dir = cons.direction if cons.direction != 0 else profile.direction
+    plan_dir = profile.direction
     plan = None
     if atr > 0:
         if plan_dir > 0:

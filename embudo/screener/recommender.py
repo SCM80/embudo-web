@@ -26,6 +26,8 @@ class ScreenRow:
     label: str
     score: float
     confidence: float
+    profit_est: float | None   # % estimado hasta el objetivo (profit esperado)
+    rr: float | None           # ratio beneficio/riesgo del plan
     reason: str
     rel_volume: float | None
 
@@ -71,18 +73,26 @@ def screen(
         if not _passes_filters(a, profile):
             continue
         rv = a.df.get("rel_volume")
+        profit_est = rr = None
+        if a.trade_plan and a.trade_plan.entry:
+            # Profit esperado = recorrido hasta el objetivo, en %.
+            profit_est = round(a.trade_plan.reward_per_share / a.trade_plan.entry * 100, 2)
+            rr = a.trade_plan.reward_risk
         rows.append(ScreenRow(
             ticker=ticker,
             name=a.name,
             label=a.consensus.label,
             score=a.consensus.score,
             confidence=a.consensus.confidence,
+            profit_est=profit_est,
+            rr=rr,
             reason=_top_reason(a),
             rel_volume=round(float(rv.dropna().iloc[-1]), 2) if rv is not None and not rv.dropna().empty else None,
         ))
 
+    cols = ["ticker", "name", "label", "score", "confidence", "profit_est", "rr", "reason", "rel_volume"]
     if not rows:
-        return pd.DataFrame(columns=["ticker", "name", "label", "score", "confidence", "reason", "rel_volume"])
+        return pd.DataFrame(columns=cols)
 
     df = pd.DataFrame([r.__dict__ for r in rows])
     # Ranking: para cortos (direction<0) los mejores son los más negativos.

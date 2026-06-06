@@ -21,7 +21,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from embudo import alerts, analyzer, config, journal, postmortem, watchlist
-from embudo.data import health, realtime
+from embudo.data import catalog, health, realtime
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS
 from embudo.screener import recommender
@@ -156,10 +156,21 @@ def _sidebar_watchlist() -> None:
     st.sidebar.markdown("---")
     st.sidebar.subheader("⭐ Mi watchlist")
     current = watchlist.load()
-    new_t = st.sidebar.text_input("Añadir ticker", key="wl_add", placeholder="Ej.: NVDA")
-    if st.sidebar.button("Añadir", key="wl_add_btn") and new_t:
-        watchlist.add(new_t)
-        st.rerun()
+
+    # Autocompletar: escribe y sugiere tickers del catálogo (IBEX + EEUU).
+    pick = st.sidebar.selectbox(
+        "Añadir ticker (escribe para buscar)",
+        options=[""] + catalog.suggestions(),
+        format_func=lambda t: "— elige o escribe —" if t == "" else catalog.label(t),
+        key="wl_pick",
+    )
+    custom = st.sidebar.text_input("…o escribe otro ticker", key="wl_add",
+                                   placeholder="Ej.: NVDA, SAN.MC")
+    if st.sidebar.button("Añadir", key="wl_add_btn"):
+        chosen = (custom.strip() or pick).upper()
+        if chosen:
+            watchlist.add(chosen)
+            st.rerun()
     if current:
         to_remove = st.sidebar.multiselect("Quitar", current, key="wl_rm")
         if to_remove:
@@ -273,17 +284,32 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None) -> Non
         st.caption("**Niveles automáticos:** " + " · ".join(
             f"{lv.kind} {lv.price:.2f} ({lv.strength})" for lv in a.levels))
 
+    # Aviso de alineación: ¿la señal encaja con la estrategia elegida?
+    strat_dir = a.profile.direction
+    if strat_dir < 0 and cons.score > 0.15:
+        st.warning("⚠️ Estrategia de **corto**, pero este valor **no muestra debilidad** "
+                   "(la señal es alcista). No es un buen candidato para ponerse corto.")
+    elif strat_dir > 0 and cons.score < -0.15:
+        st.warning("⚠️ Estrategia de **compra**, pero la señal es **bajista**. "
+                   "No es un buen candidato para comprar.")
+
     # Recomendación de precio / entrada-salida.
-    st.subheader("🎯 Recomendación de precio (entrada / salida)")
+    sentido = "🔻 CORTO (ganas si baja)" if strat_dir < 0 else "🔼 LARGO (ganas si sube)"
+    st.subheader(f"🎯 Recomendación de precio · {sentido}")
     if a.trade_plan:
         p = a.trade_plan
-        cols = st.columns(5)
+        profit_pct = p.reward_per_share / p.entry * 100 if p.entry else 0.0
+        cols = st.columns(6)
         cols[0].metric("Entrada", f"{p.entry:.2f}")
         cols[1].metric("Stop", f"{p.stop:.2f}")
         cols[2].metric("Objetivo", f"{p.target:.2f}")
-        cols[3].metric("R:R", f"{p.reward_risk:.1f}")
-        cols[4].metric("Acciones", f"{p.shares}")
+        cols[3].metric("💰 Profit objetivo", f"+{profit_pct:.1f}%")
+        cols[4].metric("R:R", f"{p.reward_risk:.1f}")
+        cols[5].metric("Acciones", f"{p.shares}")
         st.caption(p.detail)
+        if strat_dir < 0:
+            st.caption("En corto: entras vendiendo a la *entrada*, el *stop* está por **encima** "
+                       "(pérdida si sube) y el *objetivo* por **debajo** (beneficio si baja).")
     else:
         st.caption("Sin datos suficientes para el plan de entrada/salida.")
 
@@ -354,8 +380,15 @@ def tab_recomendador(cfg: dict) -> None:
             return
         accion = "compras" if PRESETS[cfg["strategy"]].direction > 0 else "ventas/cortos"
         st.success(f"Top candidatos ({accion}):")
+
+        orden = st.radio("Ordenar por", ["⭐ Mejor señal", "💰 Mayor profit estimado"],
+                         horizontal=True, key="orden")
+        if orden.startswith("💰") and "profit_est" in df.columns:
+            df = df.sort_values("profit_est", ascending=False, na_position="last").reset_index(drop=True)
+
         show = df.rename(columns={"ticker": "Ticker", "name": "Nombre", "label": "Señal",
                                   "score": "Score", "confidence": "Confianza",
+                                  "profit_est": "Profit est. %", "rr": "R:R",
                                   "reason": "Motivo principal", "rel_volume": "Vol. rel."})
         st.dataframe(show, hide_index=True, use_container_width=True)
         st.download_button("⬇️ Exportar a CSV", df.to_csv(index=False).encode("utf-8"),
