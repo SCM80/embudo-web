@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from embudo import alerts, analyzer, config, journal, postmortem, watchlist
+from embudo import alerts, analyzer, config, decision, journal, postmortem, watchlist
 from embudo.data import catalog, health, realtime
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS
@@ -202,8 +202,8 @@ def render_regime(regime) -> None:
     st.info(f"{emoji} **Régimen de mercado: {regime.label}** — {regime.detail}")
 
 
-def kpi_header(a: analyzer.Analysis, finnhub_key: str | None) -> None:
-    """Cabecera de KPIs con cotización casi-real."""
+def kpi_header(a: analyzer.Analysis, finnhub_key: str | None):
+    """Cabecera de KPIs con cotización casi-real. Devuelve la cotización en vivo."""
     f = a.fundamentals or {}
     quote = realtime.get_live_quote(a.ticker, finnhub_key)
     price = quote.price if quote.price is not None else a.last_price
@@ -224,9 +224,18 @@ def kpi_header(a: analyzer.Analysis, finnhub_key: str | None) -> None:
     cols[5].metric("Vol. vs media", f"{rel_vol:.1f}x" if rel_vol else "—")
     st.caption(f"🕒 {quote.asof} · fuente: {quote.source}"
                + ("  ·  ⏳ dato con retardo" if quote.delayed else "  ·  🟢 en vivo"))
+    return quote
 
 
-def price_chart(df: pd.DataFrame, name: str, levels=None, show_vwap: bool = False) -> go.Figure:
+def price_chart(df: pd.DataFrame, name: str, levels=None, show_vwap: bool = False,
+                live_price: float | None = None) -> go.Figure:
+    # Última vela en tiempo real: actualiza el cierre (y mecha) del último día.
+    if live_price is not None and not df.empty:
+        df = df.copy()
+        i = df.index[-1]
+        df.loc[i, "Close"] = live_price
+        df.loc[i, "High"] = max(df.loc[i, "High"], live_price)
+        df.loc[i, "Low"] = min(df.loc[i, "Low"], live_price)
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28],
                         vertical_spacing=0.03)
     fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"],
@@ -264,7 +273,20 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None) -> Non
     cons = a.consensus
 
     st.markdown(f"### {a.name}  ·  `{a.ticker}`")
-    kpi_header(a, finnhub_key)
+    quote = kpi_header(a, finnhub_key)
+
+    # 🚦 Decisor fácil: veredicto de una frase.
+    p = a.trade_plan
+    profit_pct = (p.reward_per_share / p.entry * 100) if (p and p.entry) else None
+    rr = p.reward_risk if p else None
+    v = decision.decide(cons.score, a.profile.direction, profit_pct, rr, cons.confidence)
+    bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828"}[v.color]
+    st.markdown(
+        f"<div style='background:{bg};color:white;padding:16px 20px;border-radius:10px;margin-bottom:6px'>"
+        f"<span style='font-size:1.5rem;font-weight:800'>{v.emoji} {v.action}</span>"
+        f"<div style='font-size:1rem;margin-top:4px'>{v.phrase}</div></div>",
+        unsafe_allow_html=True,
+    )
 
     label_badge(cons.label, cons.score, cons.confidence)
     if cons.conflict:
@@ -278,7 +300,8 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None) -> Non
         col.metric(DIM_NAMES.get(k, k), f"{v:+.2f}")
 
     show_vwap = a.profile.horizon is Horizon.INTRADAY
-    st.plotly_chart(price_chart(a.df, a.name, levels=a.levels, show_vwap=show_vwap),
+    live = quote.price if (quote and not config.DEMO_MODE) else None
+    st.plotly_chart(price_chart(a.df, a.name, levels=a.levels, show_vwap=show_vwap, live_price=live),
                     use_container_width=True)
     if a.levels:
         st.caption("**Niveles automáticos:** " + " · ".join(
@@ -378,13 +401,31 @@ def tab_recomendador(cfg: dict) -> None:
             st.warning("Sin resultados. Puede ser falta de datos/conexión: activa el "
                        "**🧪 Modo demo** en la barra lateral o revisa tu internet.")
             return
-        accion = "compras" if PRESETS[cfg["strategy"]].direction > 0 else "ventas/cortos"
+        direction = PRESETS[cfg["strategy"]].direction
+        accion = "compras" if direction > 0 else "ventas/cortos"
         st.success(f"Top candidatos ({accion}):")
 
-        orden = st.radio("Ordenar por", ["⭐ Mejor señal", "💰 Mayor profit estimado"],
+        c1, c2 = st.columns([3, 2])
+        orden = c1.radio("Ordenar por",
+                         ["⭐ Mejor señal", "💰 Mayor profit estimado", "🏆 Calidad × profit"],
                          horizontal=True, key="orden")
-        if orden.startswith("💰") and "profit_est" in df.columns:
-            df = df.sort_values("profit_est", ascending=False, na_position="last").reset_index(drop=True)
+        solo_claras = c2.checkbox("Solo señales claras (ocultar Neutral)", value=False, key="solo_claras")
+
+        if solo_claras:
+            df = df[df["label"] != "Neutral"].reset_index(drop=True)
+        if df.empty:
+            st.info("No hay señales claras ahora mismo con esta estrategia. Prueba otra o desactiva el filtro.")
+            return
+
+        # "Fuerza a favor" de la estrategia y métrica combinada calidad×profit.
+        df = df.copy()
+        df["_fuerza"] = df["score"] * direction
+        df["_calidad_profit"] = df["_fuerza"].clip(lower=0) * df["confidence"] * df["profit_est"].fillna(0)
+        if orden.startswith("💰"):
+            df = df.sort_values("profit_est", ascending=False, na_position="last")
+        elif orden.startswith("🏆"):
+            df = df.sort_values("_calidad_profit", ascending=False)
+        df = df.drop(columns=["_fuerza", "_calidad_profit"]).reset_index(drop=True)
 
         show = df.rename(columns={"ticker": "Ticker", "name": "Nombre", "label": "Señal",
                                   "score": "Score", "confidence": "Confianza",
