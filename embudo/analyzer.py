@@ -48,14 +48,18 @@ def analyze(
     regime: Regime | None = None,
     with_backtest: bool = True,
     with_qualitative: bool = True,
+    prices: pd.DataFrame | None = None,
 ) -> Analysis:
     """Análisis completo de un valor para un perfil de estrategia.
 
     El análisis (datos, indicadores, consenso) es OBJETIVO y se calcula siempre
     igual: histórico diario. El `profile` solo influye en la dirección del plan
     (largo/corto) y el backtest de su señal, no en el análisis del valor.
+
+    `prices` permite reutilizar un OHLCV ya descargado (p. ej. en lote por el
+    screener) y evitar una petición de red por valor.
     """
-    raw = yahoo.get_prices(ticker, period="2y", interval="1d")
+    raw = prices if (prices is not None and not prices.empty) else yahoo.get_prices(ticker, period="2y", interval="1d")
     if raw is None or raw.empty:
         return Analysis(ticker, ticker, profile, pd.DataFrame(), _empty_consensus(),
                         None, None, error="Sin datos de precios para este valor.")

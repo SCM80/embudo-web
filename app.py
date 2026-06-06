@@ -61,6 +61,23 @@ def human_num(n) -> str:
     return f"{n:.1f}P"
 
 
+def _eur(ticker: str) -> bool:
+    """Heurística de moneda: sufijos europeos (.MC, .DE, .PA…) = €; resto = $."""
+    return "." in ticker and not ticker.upper().endswith((".US",))
+
+
+def money(v, ticker: str) -> str:
+    if v is None:
+        return "—"
+    return f"{v:.2f} €" if _eur(ticker) else f"${v:.2f}"
+
+
+def money_big(v, ticker: str) -> str:
+    if v is None:
+        return "—"
+    return f"{human_num(v)} €" if _eur(ticker) else f"${human_num(v)}"
+
+
 def _default_finnhub_key() -> str:
     """Clave Finnhub: variable de entorno > secrets.toml > valor en config."""
     import os
@@ -214,15 +231,16 @@ def kpi_header(a: analyzer.Analysis, finnhub_key: str | None):
         rel_vol = float(a.df["rel_volume"].dropna().iloc[-1])
 
     cols = st.columns(6)
-    cols[0].metric("Precio", f"{price:.2f}" if price else "—",
+    cols[0].metric("Precio", money(price, a.ticker) if price else "—",
                    f"{quote.change_pct:+.2f}%" if quote.change_pct is not None else None)
-    cols[1].metric("Cap. mercado", human_num(f.get("market_cap")))
+    cols[1].metric("Cap. mercado", money_big(f.get("market_cap"), a.ticker))
     pe = f.get("trailing_pe") or f.get("forward_pe")
     cols[2].metric("PER", f"{pe:.1f}" if pe else "—")
     roe = f.get("roe")
     cols[3].metric("ROE", f"{roe*100:.0f}%" if roe is not None else "—")
     lo, hi = f.get("fifty_two_low"), f.get("fifty_two_high")
-    cols[4].metric("Rango 52s", f"{lo:.0f}-{hi:.0f}" if lo and hi else "—")
+    sym = "€" if _eur(a.ticker) else "$"
+    cols[4].metric("Rango 52s", f"{lo:.0f}-{hi:.0f} {sym}" if lo and hi else "—")
     cols[5].metric("Vol. vs media", f"{rel_vol:.1f}x" if rel_vol else "—")
     st.caption(f"🕒 {quote.asof} · fuente: {quote.source}"
                + ("  ·  ⏳ dato con retardo" if quote.delayed else "  ·  🟢 en vivo"))
@@ -268,6 +286,36 @@ def _signal_table(signals) -> pd.DataFrame:
          "Motivo": s.reason} for s in signals])
 
 
+def _methodology_expander() -> None:
+    w = config.OBJECTIVE_WEIGHTS
+    with st.expander("📖 ¿Cómo se calcula? (metodología, sin magia)"):
+        st.markdown(
+            f"""
+**Score objetivo** = media ponderada de 4 dimensiones, en el rango −1…+1 (mismo
+cálculo para todas las estrategias):
+
+- 📈 **Técnico {w['tecnico']*100:.0f}%** — tendencia (precio vs SMA50/200, ADX), momentum
+  (MACD, RSI) y volumen (OBV, volumen relativo, divergencias) sobre datos diarios.
+- 🏛️ **Fundamental {w['fundamental']*100:.0f}%** — calidad/valor estilo Buffett: ROE,
+  deuda/equity, márgenes, PER frente a crecimiento.
+- 🧑‍💼 **Analistas {w['analistas']*100:.0f}%** — consenso de Yahoo (1=compra fuerte … 5=venta).
+- 📰 **Noticias {w['sentimiento']*100:.0f}%** — sentimiento de titulares (VADER).
+
+**Etiqueta**: ≥0,50 Compra fuerte · 0,15…0,50 Compra · −0,15…0,15 Neutral ·
+−0,50…−0,15 Venta · ≤−0,50 Venta fuerte.
+
+**Confianza** = grado de acuerdo entre las 4 dimensiones (si se contradicen, baja
+y se avisa). Si falta un dato (p. ej. sin analistas), esa dimensión pesa 0.
+
+**La estrategia NO cambia este análisis.** Solo decide la dirección (largo/corto),
+el plan de entrada/salida (stop por ATR o estructura, objetivo y R:R) y el backtest
+de su señal. El régimen de mercado puede atenuar señales que reman contra la tendencia.
+
+⚠️ Es apoyo a la decisión basado en datos públicos, **no asesoramiento financiero**.
+"""
+        )
+
+
 def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
                     strategy_name: str = "") -> None:
     if a.error:
@@ -282,6 +330,7 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
     st.markdown("#### 📊 Análisis objetivo del valor")
     st.caption("Este análisis es el **mismo para cualquier estrategia**: valora el activo de "
                "forma objetiva. La estrategia solo decide, más abajo, si te encaja.")
+    _methodology_expander()
     label_badge(cons.label, cons.score, cons.confidence)
     if cons.conflict:
         st.warning(cons.conflict)
@@ -344,9 +393,9 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
     st.markdown(f"**Plan de precio · {sentido}**")
     if p:
         cols = st.columns(6)
-        cols[0].metric("Entrada", f"{p.entry:.2f}")
-        cols[1].metric("Stop", f"{p.stop:.2f}")
-        cols[2].metric("Objetivo", f"{p.target:.2f}")
+        cols[0].metric("Entrada", money(p.entry, a.ticker))
+        cols[1].metric("Stop", money(p.stop, a.ticker))
+        cols[2].metric("Objetivo", money(p.target, a.ticker))
         cols[3].metric("💰 Profit objetivo", f"+{profit_pct:.1f}%")
         cols[4].metric("R:R", f"{p.reward_risk:.1f}")
         cols[5].metric("Acciones", f"{p.shares}")
@@ -472,13 +521,20 @@ def tab_diario() -> None:
     st.markdown(f"#### Abiertas ({len(open_t)})")
     if open_t:
         for t in open_t:
-            cols = st.columns([3, 2, 2])
+            cols = st.columns([3, 2, 1.3, 1.3])
             sentido = "🟢 Largo" if t.direction > 0 else "🔴 Corto"
             cols[0].write(f"**{t.ticker}** {sentido} · entrada {t.entry:.2f} · stop {t.stop:.2f} · obj {t.target:.2f}")
             exit_p = cols[1].number_input("Cierre", min_value=0.0, value=float(t.entry), key=f"x_{t.id}")
             if cols[2].button("Cerrar", key=f"c_{t.id}"):
                 journal.close(t.id, exit_p)
                 st.rerun()
+            if cols[3].button("Cerrar a precio actual", key=f"cl_{t.id}"):
+                q = realtime.get_live_quote(t.ticker)
+                if q.price:
+                    journal.close(t.id, q.price, reason="precio en vivo")
+                    st.rerun()
+                else:
+                    st.warning(f"No se pudo obtener el precio actual de {t.ticker}.")
             if t.thesis:
                 cols[0].caption(f"Tesis: {t.thesis}")
     else:

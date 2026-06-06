@@ -62,12 +62,16 @@ def screen(
     tickers = list(universe)
     rows: list[ScreenRow] = []
 
+    # Descarga de precios en un solo lote (rápido y con menos rate-limit).
+    batch = yahoo.get_prices_batch(tickers)
+
     for i, ticker in enumerate(tickers):
         if progress:
             progress(i + 1, len(tickers), ticker)
         try:
             a = analyzer.analyze(ticker, profile, capital=capital, regime=regime,
-                                 with_backtest=False, with_qualitative=True)
+                                 with_backtest=False, with_qualitative=True,
+                                 prices=batch.get(ticker))
         except Exception:
             continue
         if not _passes_filters(a, profile):

@@ -87,6 +87,44 @@ def get_prices(ticker: str, period: str = "2y", interval: str = "1d", use_cache:
     return df
 
 
+def get_prices_batch(tickers: list[str], period: str = "2y", interval: str = "1d") -> dict[str, pd.DataFrame]:
+    """Descarga OHLCV de MUCHOS tickers de una vez (rápido, menos rate-limit).
+
+    Devuelve {ticker: DataFrame}. Cachea cada uno para que abrir su ficha sea
+    instantáneo. Los tickers que fallen simplemente no aparecen en el resultado.
+    """
+    out: dict[str, pd.DataFrame] = {}
+    tickers = list(tickers)
+    if config.DEMO_MODE:
+        from . import demo
+        return {t: _normalize(demo.demo_prices(t, period, interval)) for t in tickers}
+
+    try:
+        import yfinance as yf
+        data = yf.download(tickers, period=period, interval=interval, auto_adjust=True,
+                           progress=False, threads=True, group_by="ticker")
+    except Exception:
+        data = None
+    if data is None or data.empty:
+        return out
+
+    for t in tickers:
+        try:
+            if isinstance(data.columns, pd.MultiIndex):
+                if t not in data.columns.get_level_values(0):
+                    continue
+                df = data[t]
+            else:
+                df = data  # caso de un solo ticker
+            df = _normalize(df)
+            if not df.empty:
+                out[t] = df
+                _write_cache(f"{t}_{period}_{interval}", df)
+        except Exception:
+            continue
+    return out
+
+
 def _from_yahoo(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
     try:
         import yfinance as yf
