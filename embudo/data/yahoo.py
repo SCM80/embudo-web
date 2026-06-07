@@ -173,6 +173,8 @@ def get_fundamentals(ticker: str) -> dict:
         "trailing_eps": None, "book_value": None, "price_to_book": None, "current_ratio": None,
         # KPIs de cabecera
         "market_cap": None, "fifty_two_high": None, "fifty_two_low": None, "beta": None,
+        # Próxima presentación de resultados (riesgo de gap)
+        "earnings_date": None,
     }
     if config.DEMO_MODE:
         from . import demo
@@ -206,6 +208,14 @@ def get_fundamentals(ticker: str) -> dict:
         out["fifty_two_high"] = info.get("fiftyTwoWeekHigh")
         out["fifty_two_low"] = info.get("fiftyTwoWeekLow")
         out["beta"] = info.get("beta")
+        # Próxima fecha de resultados (epoch -> ISO).
+        ts = info.get("earningsTimestamp") or info.get("earningsTimestampStart")
+        if ts:
+            try:
+                from datetime import datetime, timezone
+                out["earnings_date"] = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat()
+            except Exception:
+                pass
 
         try:
             news = tk.news or []

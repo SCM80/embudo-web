@@ -35,6 +35,7 @@ def build_plan(
     reward_risk: float = config.DEFAULT_REWARD_RISK,
     structure_stop: float | None = None,
     structure_target: float | None = None,
+    fx: float = 1.0,
 ) -> TradePlan | None:
     """Construye un plan de trade. Devuelve None si los datos no son válidos.
 
@@ -77,7 +78,9 @@ def build_plan(
         return None
 
     capital_risk = capital * risk_pct
-    shares = int(capital_risk // risk_per_share)
+    # El riesgo por acción está en la moneda del valor; lo pasamos a la del capital
+    # (EUR) con `fx` para que el nº de acciones sea correcto.
+    shares = int(capital_risk // (risk_per_share * fx))
     rr = reward_per_share / risk_per_share
 
     sentido = "LARGO" if direction > 0 else "CORTO"

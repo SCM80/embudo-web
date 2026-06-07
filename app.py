@@ -20,8 +20,10 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from embudo import alerts, analyzer, config, decision, journal, postmortem, watchlist
+from embudo import (alerts, analyzer, config, decision, journal, portfolio,
+                    postmortem, validation, watchlist)
 from embudo.data import catalog, health, realtime
+from embudo.data import yahoo as yahoo_data
 from embudo.data import universe as universe_data
 from embudo.profiles import PRESETS
 from embudo.screener import recommender
@@ -380,6 +382,8 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
     st.markdown("---")
     st.markdown(f"#### 🎯 Para tu estrategia: **{strategy_name or a.profile.horizon.value}**")
 
+    _earnings_warning(a.fundamentals.get("earnings_date"))
+
     v = decision.decide(cons.score, strat_dir, profit_pct, rr, cons.confidence)
     bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828"}[v.color]
     st.markdown(
@@ -616,18 +620,93 @@ def tab_alertas() -> None:
             st.rerun()
 
 
+def _earnings_warning(earnings_date: str | None) -> None:
+    if not earnings_date:
+        return
+    from datetime import date
+    try:
+        d = date.fromisoformat(earnings_date)
+    except Exception:
+        return
+    days = (d - date.today()).days
+    if 0 <= days <= 7:
+        st.warning(f"📅 **Resultados en {days} día(s)** ({earnings_date}): alto riesgo de *gap*. "
+                   "Mejor esperar a después de la publicación o reducir tamaño.")
+
+
+def tab_cartera(cfg: dict) -> None:
+    st.subheader("📦 Cartera")
+    st.caption("Riesgo a nivel de cartera con tus operaciones abiertas del diario.")
+    open_t = journal.open_trades()
+    if not open_t:
+        st.info("No tienes operaciones abiertas. Registra/anota planes en la pestaña 📓 Diario.")
+        return
+    pv = portfolio.summarize(open_t, cfg["capital"])
+    cols = st.columns(3)
+    cols[0].metric("Posiciones", len(pv.positions))
+    cols[1].metric("Exposición bruta", f"{pv.gross_exposure*100:.0f}%")
+    cols[2].metric("Exposición neta", f"{pv.net_exposure*100:+.0f}%")
+    st.dataframe(pd.DataFrame([{
+        "Ticker": p.ticker, "Dir": "L" if p.direction > 0 else "C",
+        "Tamaño": round(p.notional, 0), "% capital": f"{p.weight*100:.0f}%"} for p in pv.positions]),
+        hide_index=True, use_container_width=True)
+    for w in pv.warnings:
+        (st.warning if w.startswith("⚠️") else st.success)(w)
+
+    if st.button("🔗 Analizar correlación entre posiciones"):
+        with st.spinner("Descargando precios…"):
+            prices = yahoo_data.get_prices_batch([p.ticker for p in pv.positions])
+            pairs = portfolio.correlations(prices)
+        if pairs:
+            st.write("**Pares muy correlacionados (riesgo concentrado):**")
+            for a_, b_, c in pairs:
+                st.write(f"- {a_} ↔ {b_}: correlación **{c}**")
+            st.caption("Correlaciones altas = si una cae, las otras suelen caer con ella.")
+        else:
+            st.success("Sin correlaciones altas entre tus posiciones: buena diversificación.")
+
+
+def tab_validacion(cfg: dict) -> None:
+    st.subheader("🧪 Validación del sistema")
+    st.caption("¿El score predice de verdad los retornos? Esto lo mide con el histórico "
+               "(evidencia, no intuición).")
+    st.info("⚠️ Solo se valida la parte **técnica** del score (precio/volumen, point-in-time). "
+            "Fundamentales/analistas/noticias de Yahoo son del momento actual, así que "
+            "incluirlos aquí daría sesgo de look-ahead.")
+    c1, c2 = st.columns(2)
+    universe = c1.selectbox("Universo", list(universe_data.UNIVERSES.keys()), key="val_uni")
+    horizon = c2.select_slider("Horizonte (días)", options=[5, 10, 20, 40], value=10, key="val_h")
+    if st.button("🧪 Validar score", type="primary"):
+        with st.spinner("Recorriendo el histórico (puede tardar)…"):
+            prices = yahoo_data.get_prices_batch(universe_data.UNIVERSES[universe])
+            res = validation.validate(prices, horizon_bars=horizon)
+        st.metric("Observaciones", res.n_obs)
+        st.metric("Correlación score↔retorno", f"{res.correlation:+.2f}")
+        if res.buckets:
+            st.dataframe(pd.DataFrame([{
+                "Etiqueta": b.label, "Nº casos": b.n,
+                "Retorno medio": f"{b.avg_return:+.2f}%", "Acierto": f"{b.win_rate*100:.0f}%"}
+                for b in res.buckets]), hide_index=True, use_container_width=True)
+        color = st.success if res.correlation > 0.05 else st.warning if res.correlation > 0.02 else st.error
+        color(res.verdict)
+
+
 def main() -> None:
     st.title("📊 Balanzia Invest — Copiloto de inversión")
-    st.caption("IBEX + EEUU · técnico + fundamental (Buffett) + analistas + noticias · "
-               "casi tiempo real · gratis y sin claves de pago.")
+    st.caption("IBEX + EEUU · técnico + fundamental (Buffett/Graham) + Wyckoff + analistas + "
+               "noticias · casi tiempo real · gratis y sin claves de pago.")
     cfg = sidebar()
-    tabs = st.tabs(["🧭 Recomendador", "📓 Diario", "🔔 Alertas"])
+    tabs = st.tabs(["🧭 Recomendador", "📦 Cartera", "📓 Diario", "🔔 Alertas", "🧪 Validación"])
     with tabs[0]:
         tab_recomendador(cfg)
     with tabs[1]:
-        tab_diario()
+        tab_cartera(cfg)
     with tabs[2]:
+        tab_diario()
+    with tabs[3]:
         tab_alertas()
+    with tabs[4]:
+        tab_validacion(cfg)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import pandas as pd
 from . import backtest, levels as levels_mod, risk
 from .consensus import engine
 from .consensus.engine import Consensus
-from .data import yahoo
+from .data import fx, yahoo
 from .indicators import technical
 from .levels import Level
 from .profiles import StrategyProfile
@@ -101,6 +101,7 @@ def analyze(
             entry, atr, plan_dir, capital,
             structure_stop=stop_lv.price if stop_lv else None,
             structure_target=tgt_lv.price if tgt_lv else None,
+            fx=fx.to_eur_rate(ticker),
         )
 
     bt = backtest.run(raw, profile) if with_backtest else None

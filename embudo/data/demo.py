@@ -63,11 +63,19 @@ def demo_fundamentals(ticker: str) -> dict:
         "book_value": round(float(rng.uniform(5.0, 60.0)), 2),
         "price_to_book": round(float(rng.uniform(0.6, 8.0)), 2),
         "current_ratio": round(float(rng.uniform(0.7, 3.5)), 2),
+        "earnings_date": _demo_earnings(rng),
         "market_cap": float(rng.uniform(1e9, 2e12)),
         "fifty_two_high": round(price * float(rng.uniform(1.05, 1.4)), 2),
         "fifty_two_low": round(price * float(rng.uniform(0.6, 0.95)), 2),
         "beta": round(float(rng.uniform(0.6, 1.8)), 2),
     }
+
+
+def _demo_earnings(rng) -> str:
+    from datetime import date, timedelta
+    # A veces resultados inminentes (para ver el aviso), a veces lejanos.
+    days = int(rng.choice([3, 5, 8, 20, 45, 70]))
+    return (date.today() + timedelta(days=days)).isoformat()
 
 
 def demo_quote(ticker: str) -> tuple[float, float]:
