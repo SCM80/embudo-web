@@ -1,4 +1,4 @@
-# 📐 Embudo — Diseño técnico y hoja de ruta
+# 📐 Balanzia Invest — Diseño técnico y hoja de ruta
 
 ## Visión
 

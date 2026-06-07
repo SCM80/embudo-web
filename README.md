@@ -1,4 +1,4 @@
-# 📊 Embudo — Copiloto de inversión en bolsa
+# 📊 Balanzia Invest — Copiloto de inversión en bolsa
 
 Herramienta **gratuita y sin API keys de pago** para apoyar decisiones de
 inversión combinando **análisis técnico**, **contexto de mercado (régimen)**,
@@ -6,13 +6,13 @@ una **capa cualitativa** (recomendaciones de analistas + sentimiento de
 noticias) y **gestión de riesgo**, con **backtest** para validar las señales en
 lugar de creérselas a ciegas.
 
-> ⚠️ **Aviso**: Embudo es una herramienta de **apoyo a la decisión**, *no*
+> ⚠️ **Aviso**: Balanzia Invest es una herramienta de **apoyo a la decisión**, *no*
 > asesoramiento financiero. Invertir conlleva riesgo de pérdida.
 
 ## ✨ Qué hace
 
 - **🧭 Recomendador estrategia-first:** eliges **1 de 4 estrategias** y un
-  **mercado (IBEX 35 / EEUU Nasdaq 100 + Dow 30 / tu watchlist)**, y Embudo
+  **mercado (IBEX 35 / EEUU Nasdaq 100 + Dow 30 / tu watchlist)**, y Balanzia Invest
   **filtra y rankea** las acciones recomendadas. Pinchas una y ves su ficha.
 - **4 estrategias:** Calidad/Valor (Buffett), Seguir volumen/momentum, Intraday
   técnico y Posicionarse a corto/bajista.

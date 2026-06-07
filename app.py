@@ -1,8 +1,8 @@
-"""Embudo — copiloto de inversión (interfaz Streamlit).
+"""Balanzia Invest — copiloto de inversión (interfaz Streamlit).
 
 Flujo principal (Recomendador):
   1) Eliges una de las 4 estrategias y un mercado (IBEX / EEUU / tu watchlist).
-  2) Embudo escanea y te muestra las acciones recomendadas, rankeadas.
+  2) Balanzia Invest escanea y te muestra las acciones recomendadas, rankeadas.
   3) Eliges una y ves su ficha: gráfico de velas + KPIs, recomendación de
      entrada/salida y los porqués (técnico + fundamental + analistas + noticias).
 
@@ -35,7 +35,7 @@ except Exception:  # dependencia opcional
 WATCHLIST_NAME = "⭐ Mi watchlist"
 MARKETS = ["IBEX 35", "EEUU (Nasdaq 100 + Dow 30)", WATCHLIST_NAME]
 
-st.set_page_config(page_title="Embudo · Copiloto de inversión", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Balanzia Invest · Copiloto de inversión", page_icon="📊", layout="wide")
 
 LABEL_COLORS = {
     "Compra fuerte": "#0a8f3c", "Compra": "#4caf50", "Neutral": "#9e9e9e",
@@ -476,7 +476,7 @@ def tab_recomendador(cfg: dict) -> None:
                                   "reason": "Motivo principal", "rel_volume": "Vol. rel."})
         st.dataframe(show, hide_index=True, use_container_width=True)
         st.download_button("⬇️ Exportar a CSV", df.to_csv(index=False).encode("utf-8"),
-                           file_name=f"embudo_{cfg['strategy'][:8]}.csv", mime="text/csv")
+                           file_name=f"balanzia_{cfg['strategy'][:8]}.csv", mime="text/csv")
 
         st.markdown("---")
         tickers = df["ticker"].tolist()
@@ -617,7 +617,7 @@ def tab_alertas() -> None:
 
 
 def main() -> None:
-    st.title("📊 Embudo — Copiloto de inversión")
+    st.title("📊 Balanzia Invest — Copiloto de inversión")
     st.caption("IBEX + EEUU · técnico + fundamental (Buffett) + analistas + noticias · "
                "casi tiempo real · gratis y sin claves de pago.")
     cfg = sidebar()
