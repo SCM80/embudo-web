@@ -76,7 +76,7 @@ def analyze(
         name = fund.get("name", ticker)
         analyst_view = analysts.from_mean(fund.get("recommendation_mean"), fund.get("num_analysts", 0))
         sentiment_view = sentiment.analyze(fund.get("headlines", []))
-        fundamental_view = fundamentals.evaluate(fund)
+        fundamental_view = fundamentals.evaluate(fund, price=float(df["Close"].iloc[-1]))
 
     cons = engine.evaluate(df, profile, analyst_view, sentiment_view, fundamental_view, regime)
 

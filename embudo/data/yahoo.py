@@ -169,6 +169,8 @@ def get_fundamentals(ticker: str) -> dict:
         "roe": None, "debt_to_equity": None, "profit_margins": None,
         "trailing_pe": None, "forward_pe": None,
         "revenue_growth": None, "earnings_growth": None,
+        # Graham: valor intrínseco y solidez
+        "trailing_eps": None, "book_value": None, "price_to_book": None, "current_ratio": None,
         # KPIs de cabecera
         "market_cap": None, "fifty_two_high": None, "fifty_two_low": None, "beta": None,
     }
@@ -194,6 +196,11 @@ def get_fundamentals(ticker: str) -> dict:
         out["forward_pe"] = info.get("forwardPE")
         out["revenue_growth"] = info.get("revenueGrowth")
         out["earnings_growth"] = info.get("earningsGrowth")
+        # Graham
+        out["trailing_eps"] = info.get("trailingEps")
+        out["book_value"] = info.get("bookValue")          # valor contable por acción
+        out["price_to_book"] = info.get("priceToBook")
+        out["current_ratio"] = info.get("currentRatio")
         # KPIs
         out["market_cap"] = info.get("marketCap")
         out["fifty_two_high"] = info.get("fiftyTwoWeekHigh")

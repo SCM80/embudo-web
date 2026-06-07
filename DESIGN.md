@@ -110,6 +110,15 @@ ni slippage: es validación honesta, no un motor de trading profesional.
   aviso de desacuerdo).
 - `app.py`: flujo estrategia → lista → ficha; KPIs; auto-refresco opcional.
 
+### Criterio avanzado (Graham & Wyckoff)
+- **Graham** (`qualitative/fundamentals.py`): Número de Graham (margen de
+  seguridad: precio vs √(22,5·BPA·VC)), regla PER×P/B ≤ 22,5 y current ratio.
+- **Wyckoff** (`signals/wyckoff.py` + `signals/volume.py`): springs/upthrusts
+  (sacudidas en soportes/resistencias), fase del rango (acumulación/distribución
+  por OBV), esfuerzo vs resultado y volumen climático.
+- **Anti-sobreextensión** (`signals/trend.py`): penaliza comprar muy por encima
+  de la media; **caída brusca** reciente como aviso de distribución.
+
 ### Fuera de alcance (decidido con el usuario)
 - Sentimiento de redes sociales (cobertura nula en IBEX; descartado).
 - Tiempo real de pago, ejecución de órdenes o conexión con bróker.

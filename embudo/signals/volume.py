@@ -54,12 +54,27 @@ def evaluate(df: pd.DataFrame, window: int = 20) -> SignalGroup:
             group.add(Signal("Divergencia alcista", 0.7, 1.3, "Precio baja pero hay acumulación: posible suelo."))
 
     # Caída brusca en la última sesión = posible distribución / giro.
+    rv_last = float(rel_vol.dropna().iloc[-1]) if rel_vol is not None and not rel_vol.dropna().empty else 1.0
     if len(df) > 1:
         ret1 = float(df["Close"].pct_change().iloc[-1])
-        rv_last = float(rel_vol.dropna().iloc[-1]) if rel_vol is not None and not rel_vol.dropna().empty else 1.0
         if ret1 <= -0.07:
             extra = " con volumen alto (distribución)" if rv_last >= 1.3 else ""
             group.add(Signal("Caída brusca reciente", -0.6, 1.2,
                              f"Caída de {ret1*100:.0f}% en la última sesión{extra}: posible giro, cautela."))
+
+        # --- Wyckoff: esfuerzo vs resultado y volumen climático ---
+        ret1 = float(df["Close"].pct_change().iloc[-1])
+        trend = price_slope if price_slope is not None else 0.0
+        if rv_last >= 2.5:
+            # Volumen climático: tras subida = clímax comprador (techo); tras bajada = clímax vendedor (suelo).
+            if trend > 0.02:
+                group.add(Signal("Clímax comprador", -0.5, 1.2,
+                                 f"Volumen climático ({rv_last:.1f}x) tras subida: posible techo (Wyckoff)."))
+            elif trend < -0.02:
+                group.add(Signal("Clímax vendedor", 0.5, 1.2,
+                                 f"Volumen climático ({rv_last:.1f}x) tras caída: posible suelo/capitulación (Wyckoff)."))
+        if rv_last >= 1.8 and abs(ret1) < 0.005:
+            group.add(Signal("Esfuerzo sin resultado", -0.4, 1.0,
+                             f"Mucho volumen ({rv_last:.1f}x) pero el precio apenas se mueve: agotamiento (Wyckoff)."))
 
     return group

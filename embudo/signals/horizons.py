@@ -14,7 +14,7 @@ from enum import Enum
 import pandas as pd
 
 from .. import levels as levels_mod
-from . import trend, volume
+from . import trend, volume, wyckoff
 from .base import Signal, SignalGroup
 
 
@@ -76,6 +76,10 @@ def evaluate(df: pd.DataFrame, horizon: Horizon, volume_emphasis: bool = False) 
     # Base común: tendencia + volumen (con pesos según horizonte).
     trend_group = trend.evaluate(df)
     volume_group = volume.evaluate(df)
+
+    # Wyckoff: sacudidas y fase del rango sobre los niveles detectados.
+    wyckoff_group = wyckoff.evaluate(df, levels_mod.detect(df))
+    group.signals.extend(wyckoff_group.signals)
 
     if volume_emphasis:
         for s in volume_group.signals:
