@@ -24,6 +24,7 @@ class StrategyProfile:
     min_rel_volume: float | None = None
     direction: int = 1                          # +1 busca compras, -1 ventas/cortos
     volume_emphasis: bool = False               # sube el peso del volumen (estrategia "seguir el dinero")
+    min_quality: float | None = None            # exige un mínimo de calidad fundamental (score)
     weight_override: dict[str, float] | None = field(default=None)
 
     @property
@@ -58,7 +59,7 @@ class StrategyProfile:
 # Las 4 estrategias seleccionables en el recomendador.
 PRESETS: dict[str, StrategyProfile] = {
     "Calidad/Valor (Buffett)": StrategyProfile(
-        Horizon.LARGO,
+        Horizon.LARGO, min_quality=0.0,
         weight_override={"tecnico": 0.30, "fundamental": 0.45, "analistas": 0.20, "sentimiento": 0.05},
     ),
     "Seguir volumen/momentum": StrategyProfile(

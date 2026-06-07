@@ -60,4 +60,15 @@ def evaluate(df: pd.DataFrame) -> SignalGroup:
         elif macd_hist < 0:
             group.add(Signal("MACD", -0.4, 0.8, "Momentum negativo (histograma MACD < 0)."))
 
+    # 5) Sobreextensión: precio demasiado lejos de su media (riesgo de comprar caro).
+    if close is not None and sma_fast is not None and sma_fast > 0:
+        ext = (close - sma_fast) / sma_fast
+        if ext >= 0.30:
+            group.add(Signal("Sobreextensión alta", -0.7, 1.4,
+                             f"Precio {ext*100:.0f}% por encima de la SMA50: muy estirado, "
+                             f"alto riesgo de comprar en techo (mejor esperar un retroceso)."))
+        elif ext >= 0.15:
+            group.add(Signal("Sobreextensión", -0.4, 1.0,
+                             f"Precio {ext*100:.0f}% sobre la SMA50: extendido, entrada poco favorable."))
+
     return group

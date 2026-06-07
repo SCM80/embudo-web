@@ -53,4 +53,13 @@ def evaluate(df: pd.DataFrame, window: int = 20) -> SignalGroup:
         elif price_slope < -0.02 and obv_slope > 0.02:
             group.add(Signal("Divergencia alcista", 0.7, 1.3, "Precio baja pero hay acumulación: posible suelo."))
 
+    # Caída brusca en la última sesión = posible distribución / giro.
+    if len(df) > 1:
+        ret1 = float(df["Close"].pct_change().iloc[-1])
+        rv_last = float(rel_vol.dropna().iloc[-1]) if rel_vol is not None and not rel_vol.dropna().empty else 1.0
+        if ret1 <= -0.07:
+            extra = " con volumen alto (distribución)" if rv_last >= 1.3 else ""
+            group.add(Signal("Caída brusca reciente", -0.6, 1.2,
+                             f"Caída de {ret1*100:.0f}% en la última sesión{extra}: posible giro, cautela."))
+
     return group

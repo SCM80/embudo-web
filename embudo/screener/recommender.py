@@ -39,6 +39,11 @@ def _passes_filters(analysis: Analysis, profile: StrategyProfile) -> bool:
         rv = analysis.df.get("rel_volume")
         if rv is None or rv.dropna().empty or float(rv.dropna().iloc[-1]) < profile.min_rel_volume:
             return False
+    # Filtro de calidad fundamental (p. ej. Calidad/Valor): si hay datos y son malos, fuera.
+    if profile.min_quality is not None:
+        fv = analysis.consensus.fundamental
+        if fv is not None and fv.n_metrics > 0 and fv.score < profile.min_quality:
+            return False
     return True
 
 
