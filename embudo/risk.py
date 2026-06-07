@@ -48,10 +48,15 @@ def build_plan(
 
     stop_distance = atr_mult * atr
     stop_basis = f"{atr_mult:g}·ATR"
+    # Un stop en estructura solo es válido si está RAZONABLEMENTE cerca. En valores
+    # muy alcistas el soporte más próximo puede estar lejísimos (p. ej. -75%): eso
+    # no es un stop, es arruinarse. Si el nivel está más lejos que este límite,
+    # usamos el stop por ATR.
+    max_stop_distance = min(max(stop_distance * 1.5, 0.08 * entry), 0.20 * entry)
+
     if direction > 0:
         stop = entry - stop_distance
-        # Soporte por debajo de la entrada: stop justo bajo el nivel.
-        if structure_stop is not None and 0 < structure_stop < entry:
+        if structure_stop is not None and 0 < (entry - structure_stop) <= max_stop_distance:
             stop = structure_stop * 0.998
             stop_basis = "soporte"
         target = entry + reward_risk * abs(entry - stop)
@@ -59,7 +64,7 @@ def build_plan(
             target = structure_target  # resistencia como objetivo natural
     else:
         stop = entry + stop_distance
-        if structure_stop is not None and structure_stop > entry:
+        if structure_stop is not None and 0 < (structure_stop - entry) <= max_stop_distance:
             stop = structure_stop * 1.002
             stop_basis = "resistencia"
         target = entry - reward_risk * abs(entry - stop)
