@@ -444,11 +444,33 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
 
 def tab_recomendador(cfg: dict) -> None:
     st.subheader("🧭 Recomendador")
-    st.caption(f"Estrategia: **{cfg['strategy']}** · Mercado: **{cfg['market']}**. "
-               "Cambia ambos en la barra lateral.")
+
+    # 🔎 Buscador UNIVERSAL: analiza cualquier ticker (esté o no en un índice).
+    with st.container(border=True):
+        st.markdown("**🔎 Analiza cualquier valor por ticker**")
+        sc = st.columns([3, 1])
+        tk = sc[0].text_input("Ticker (Yahoo)", key="uni_search",
+                              placeholder="Ej.: SPCX, NVDA, AAPL, SAN.MC", label_visibility="collapsed")
+        go = sc[1].button("Analizar", type="primary", key="uni_go")
+        if (go or tk) and tk.strip():
+            t = tk.strip().upper()
+            with st.spinner(f"Analizando {t}…"):
+                a = cached_analyze(t, cfg["strategy"], cfg["capital"], cfg["demo"])
+            if a.error:
+                st.error(f"No se pudo cargar «{t}»: {a.error} "
+                         "Comprueba el símbolo exacto en finance.yahoo.com.")
+            else:
+                if st.button(f"⭐ Añadir {t} a mi watchlist", key="uni_addwl"):
+                    watchlist.add(t)
+                    st.success(f"{t} añadido a tu watchlist.")
+                render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
+            return
+
+    st.caption(f"O usa el escáner por estrategia/mercado — Estrategia: **{cfg['strategy']}** · "
+               f"Mercado: **{cfg['market']}** (cámbialos en la barra lateral).")
 
     if cfg["market"] == WATCHLIST_NAME and not watchlist.load():
-        st.info("Tu watchlist está vacía. Añade valores desde la barra lateral ⭐.")
+        st.info("Tu watchlist está vacía. Añade valores desde la barra lateral ⭐ o búscalos arriba.")
         return
 
     # Estado de las listas dinámicas (componentes del índice).
@@ -514,14 +536,6 @@ def tab_recomendador(cfg: dict) -> None:
         if choice:
             with st.spinner(f"Analizando {choice}…"):
                 a = cached_analyze(choice, cfg["strategy"], cfg["capital"], cfg["demo"])
-            render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
-
-    st.markdown("---")
-    with st.expander("🔬 Analizar otro valor por ticker"):
-        manual = st.text_input("Ticker (Yahoo)", placeholder="AAPL, ITX.MC, SAN.MC…", key="manual_tk")
-        if manual:
-            with st.spinner(f"Analizando {manual}…"):
-                a = cached_analyze(manual.strip().upper(), cfg["strategy"], cfg["capital"], cfg["demo"])
             render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
 
 
