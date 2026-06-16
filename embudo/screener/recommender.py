@@ -111,7 +111,7 @@ def screen(
 
 def screen_named(universe_name: str, profile: StrategyProfile, **kwargs) -> tuple[pd.DataFrame, Regime | None]:
     """Versión que resuelve universo + régimen a partir del nombre del universo."""
-    tickers = universe_data.UNIVERSES.get(universe_name, [])
+    tickers = universe_data.get_universe(universe_name)
     index_symbol = universe_data.REGIME_INDEX.get(universe_name)
     regime = None
     if index_symbol:

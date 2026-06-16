@@ -5,5 +5,6 @@ pandas>=2.0
 numpy>=1.24
 plotly>=5.20
 yfinance>=0.2.40        # Datos de mercado (Yahoo Finance, sin API key)
+lxml>=4.9               # leer componentes de índices desde Wikipedia (universos dinámicos)
 vaderSentiment>=3.3.2   # Sentimiento local, sin API
 requests>=2.31

@@ -35,7 +35,7 @@ except Exception:  # dependencia opcional
     st_autorefresh = None
 
 WATCHLIST_NAME = "⭐ Mi watchlist"
-MARKETS = ["IBEX 35", "EEUU (Nasdaq 100 + Dow 30)", WATCHLIST_NAME]
+MARKETS = ["IBEX 35", "EEUU (Nasdaq 100 + Dow 30)", "S&P 500", WATCHLIST_NAME]
 
 st.set_page_config(page_title="Balanzia Invest · Copiloto de inversión", page_icon="📊", layout="wide")
 
@@ -436,6 +436,17 @@ def tab_recomendador(cfg: dict) -> None:
         st.info("Tu watchlist está vacía. Añade valores desde la barra lateral ⭐.")
         return
 
+    # Estado de las listas dinámicas (componentes del índice).
+    if cfg["market"] not in (WATCHLIST_NAME, "Magnificent 7 (rápido)"):
+        n = len(universe_data.get_universe(cfg["market"]))
+        upd = universe_data.last_updated(cfg["market"])
+        cc = st.columns([4, 1])
+        cc[0].caption(f"📋 {n} valores · listas {'actualizadas el ' + upd if upd else 'de respaldo (sin actualizar aún)'}.")
+        if cc[1].button("🔄 Actualizar listas"):
+            universe_data.refresh_all()
+            cached_screen.clear()
+            st.rerun()
+
     if st.button("🔎 Escanear / actualizar lista", type="primary"):
         cached_screen.clear()  # fuerza un re-escaneo fresco
         st.session_state["scanned"] = True
@@ -678,7 +689,7 @@ def tab_validacion(cfg: dict) -> None:
     horizon = c2.select_slider("Horizonte (días)", options=[5, 10, 20, 40], value=10, key="val_h")
     if st.button("🧪 Validar score", type="primary"):
         with st.spinner("Recorriendo el histórico (puede tardar)…"):
-            prices = yahoo_data.get_prices_batch(universe_data.UNIVERSES[universe])
+            prices = yahoo_data.get_prices_batch(universe_data.get_universe(universe))
             res = validation.validate(prices, horizon_bars=horizon)
         st.metric("Observaciones", res.n_obs)
         st.metric("Correlación score↔retorno", f"{res.correlation:+.2f}")
