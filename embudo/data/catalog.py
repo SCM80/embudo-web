@@ -1,10 +1,16 @@
-"""Catálogo de tickers conocidos para autocompletar (IBEX + EEUU).
+"""Catálogo de tickers para autocompletar y BUSCAR por nombre.
 
-Se usa para sugerir tickers según el usuario escribe en la watchlist. Es la
-unión de los universos soportados; offline y sin red.
+Por defecto usa los componentes de los índices soportados (offline). Si hay red,
+`load_full()` descarga el directorio completo de símbolos de NYSE+NASDAQ (gratis,
+NASDAQ Trader) para poder buscar cualquier valor del mercado por nombre o ticker.
 """
 from __future__ import annotations
 
+import json
+import time
+from pathlib import Path
+
+from .. import config
 from .universe import IBEX35, US_LARGE
 
 # Nombres legibles de los valores del IBEX (los de EEUU se muestran por ticker).
@@ -66,3 +72,79 @@ def suggestions() -> list[str]:
     ibex = sorted(IBEX35)
     us = sorted(set(US_LARGE) - set(IBEX35))
     return ibex + us
+
+
+# ---------------- Catálogo completo del mercado (NYSE+NASDAQ) ----------------
+
+_CACHE = Path(config.CACHE_DIR) / "symbol_catalog.json"
+_TTL = 30 * 24 * 3600  # se actualiza como mucho una vez al mes
+_NASDAQ_FILES = [
+    "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
+    "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
+]
+
+
+def _fetch_full() -> dict[str, str]:
+    """Descarga el directorio de símbolos NYSE+NASDAQ. {} si falla (sin red)."""
+    out: dict[str, str] = {}
+    try:
+        import requests
+        for url in _NASDAQ_FILES:
+            r = requests.get(url, timeout=15)
+            if r.status_code != 200:
+                continue
+            for line in r.text.splitlines()[1:]:
+                parts = line.split("|")
+                if len(parts) < 2 or parts[0] in ("", "Symbol", "ACT Symbol"):
+                    continue
+                if "File Creation Time" in line:
+                    continue
+                sym = parts[0].strip().upper().replace(".", "-")
+                name = parts[1].strip()
+                if sym and name:
+                    out[sym] = name
+    except Exception:
+        return {}
+    return out
+
+
+def load_full() -> dict[str, str]:
+    """Mapa ticker→nombre de TODO el mercado (cacheado). Fallback al catálogo base."""
+    if config.DEMO_MODE:
+        return dict(NAMES)
+    try:
+        if _CACHE.exists() and time.time() - _CACHE.stat().st_mtime < _TTL:
+            data = json.loads(_CACHE.read_text(encoding="utf-8"))
+            if data:
+                return {**NAMES, **data}
+    except Exception:
+        pass
+    fetched = _fetch_full()
+    if fetched:
+        try:
+            _CACHE.parent.mkdir(parents=True, exist_ok=True)
+            _CACHE.write_text(json.dumps(fetched), encoding="utf-8")
+        except Exception:
+            pass
+        return {**NAMES, **fetched}
+    return dict(NAMES)
+
+
+def search(query: str, limit: int = 20) -> list[tuple[str, str]]:
+    """Busca por ticker o nombre en todo el mercado. Devuelve [(ticker, nombre)]."""
+    q = (query or "").strip().upper()
+    if not q:
+        return []
+    catalog = load_full()
+    starts, contains = [], []
+    for sym, name in catalog.items():
+        up_name = name.upper()
+        if sym == q or up_name == q:
+            starts.insert(0, (sym, name))
+        elif sym.startswith(q) or up_name.startswith(q):
+            starts.append((sym, name))
+        elif q in sym or q in up_name:
+            contains.append((sym, name))
+        if len(starts) >= limit:
+            break
+    return (starts + contains)[:limit]

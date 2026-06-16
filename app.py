@@ -35,7 +35,8 @@ except Exception:  # dependencia opcional
     st_autorefresh = None
 
 WATCHLIST_NAME = "⭐ Mi watchlist"
-MARKETS = ["IBEX 35", "EEUU (Nasdaq 100 + Dow 30)", "S&P 500", WATCHLIST_NAME]
+MYLIST_NAME = "📝 Mi lista (pegar tickers)"
+MARKETS = ["IBEX 35", "EEUU (Nasdaq 100 + Dow 30)", "S&P 500", WATCHLIST_NAME, MYLIST_NAME]
 
 st.set_page_config(page_title="Balanzia Invest · Copiloto de inversión", page_icon="📊", layout="wide")
 
@@ -112,6 +113,12 @@ def cached_screen(market: str, strategy_name: str, capital: float, demo: bool):
     if market == WATCHLIST_NAME:
         return recommender.screen(watchlist.load(), profile, capital=capital), None
     return recommender.screen_named(market, profile, capital=capital)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_screen_tickers(tickers: tuple, strategy_name: str, capital: float, demo: bool):
+    """Escanea una lista de tickers arbitraria (universo propio)."""
+    return recommender.screen(list(tickers), PRESETS[strategy_name], capital=capital), None
 
 
 # ----------------------------- barra lateral ------------------------------
@@ -459,6 +466,11 @@ def tab_recomendador(cfg: dict) -> None:
             if a.error:
                 st.error(f"No se pudo cargar «{t}»: {a.error} "
                          "Comprueba el símbolo exacto en finance.yahoo.com.")
+                matches = catalog.search(t)
+                if matches:
+                    st.caption("¿Quizá buscabas alguno de estos?")
+                    for sym, name in matches[:8]:
+                        st.write(f"- `{sym}` — {name}")
             else:
                 if st.button(f"⭐ Añadir {t} a mi watchlist", key="uni_addwl"):
                     watchlist.add(t)
@@ -473,8 +485,19 @@ def tab_recomendador(cfg: dict) -> None:
         st.info("Tu watchlist está vacía. Añade valores desde la barra lateral ⭐ o búscalos arriba.")
         return
 
+    # Universo propio: el usuario pega su lista de tickers (cobertura ilimitada).
+    mylist: list[str] = []
+    if cfg["market"] == MYLIST_NAME:
+        raw = st.text_area("Pega tus tickers (separados por coma, espacio o salto de línea)",
+                           key="mylist_raw", placeholder="SPCX, NVDA, AAPL\nSAN.MC IBE.MC")
+        mylist = [s.strip().upper() for s in raw.replace(",", " ").split() if s.strip()]
+        if not mylist:
+            st.info("Escribe al menos un ticker para escanear tu lista.")
+            return
+        st.caption(f"📋 {len(mylist)} valores en tu lista.")
+
     # Estado de las listas dinámicas (componentes del índice).
-    if cfg["market"] not in (WATCHLIST_NAME, "Magnificent 7 (rápido)"):
+    if cfg["market"] not in (WATCHLIST_NAME, MYLIST_NAME, "Magnificent 7 (rápido)"):
         n = len(universe_data.get_universe(cfg["market"]))
         upd = universe_data.last_updated(cfg["market"])
         cc = st.columns([4, 1])
@@ -486,11 +509,15 @@ def tab_recomendador(cfg: dict) -> None:
 
     if st.button("🔎 Escanear / actualizar lista", type="primary"):
         cached_screen.clear()  # fuerza un re-escaneo fresco
+        cached_screen_tickers.clear()
         st.session_state["scanned"] = True
 
     if st.session_state.get("scanned"):
         with st.spinner("Escaneando mercado…"):
-            df, regime = cached_screen(cfg["market"], cfg["strategy"], cfg["capital"], cfg["demo"])
+            if cfg["market"] == MYLIST_NAME:
+                df, regime = cached_screen_tickers(tuple(mylist), cfg["strategy"], cfg["capital"], cfg["demo"])
+            else:
+                df, regime = cached_screen(cfg["market"], cfg["strategy"], cfg["capital"], cfg["demo"])
         render_regime(regime)
         if df.empty:
             st.warning("Sin resultados. Puede ser falta de datos/conexión: activa el "
