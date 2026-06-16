@@ -173,25 +173,40 @@ def sidebar() -> dict:
             "finnhub_key": finnhub_key.strip() or None, "demo": demo}
 
 
+def _ticker_exists(ticker: str) -> bool:
+    """Comprueba en vivo si el ticker existe en Yahoo (en demo, siempre True)."""
+    if config.DEMO_MODE:
+        return True
+    try:
+        df = yahoo_data.get_prices(ticker, period="5d", interval="1d")
+        return df is not None and not df.empty
+    except Exception:
+        return False
+
+
 def _sidebar_watchlist() -> None:
     st.sidebar.markdown("---")
     st.sidebar.subheader("⭐ Mi watchlist")
     current = watchlist.load()
 
-    # Autocompletar: escribe y sugiere tickers del catálogo (IBEX + EEUU).
+    # Buscador UNIVERSAL: escribe cualquier ticker (aunque no esté en el catálogo).
+    typed = st.sidebar.text_input("Añadir ticker (cualquiera)", key="wl_add",
+                                  placeholder="Ej.: SPCX, NVDA, SAN.MC")
     pick = st.sidebar.selectbox(
-        "Añadir ticker (escribe para buscar)",
+        "…o elige de la lista",
         options=[""] + catalog.suggestions(),
-        format_func=lambda t: "— elige o escribe —" if t == "" else catalog.label(t),
+        format_func=lambda t: "— sugerencias —" if t == "" else catalog.label(t),
         key="wl_pick",
     )
-    custom = st.sidebar.text_input("…o escribe otro ticker", key="wl_add",
-                                   placeholder="Ej.: NVDA, SAN.MC")
     if st.sidebar.button("Añadir", key="wl_add_btn"):
-        chosen = (custom.strip() or pick).upper()
+        chosen = (typed.strip() or pick).upper()
         if chosen:
-            watchlist.add(chosen)
-            st.rerun()
+            if _ticker_exists(chosen):
+                watchlist.add(chosen)
+                st.rerun()
+            else:
+                st.sidebar.warning(f"No se encontró «{chosen}» en Yahoo. Revisa el ticker "
+                                   "(usa el símbolo exacto, p. ej. SAN.MC para el IBEX).")
     if current:
         to_remove = st.sidebar.multiselect("Quitar", current, key="wl_rm")
         if to_remove:
