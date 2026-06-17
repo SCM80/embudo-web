@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from embudo import (alerts, analyzer, config, decision, journal, portfolio,
+from embudo import (alerts, analyzer, config, decision, journal, market, portfolio,
                     postmortem, validation, watchlist)
 from embudo.data import catalog, health, realtime
 from embudo.data import yahoo as yahoo_data
@@ -518,6 +518,10 @@ def tab_recomendador(cfg: dict) -> None:
                 df, regime = cached_screen_tickers(tuple(mylist), cfg["strategy"], cfg["capital"], cfg["demo"])
             else:
                 df, regime = cached_screen(cfg["market"], cfg["strategy"], cfg["capital"], cfg["demo"])
+        # Amplitud de mercado: % de candidatos con señal de compra (para el termómetro).
+        if not df.empty and "label" in df.columns:
+            bull = df["label"].isin(["Compra", "Compra fuerte"]).mean()
+            st.session_state["breadth"] = float(bull)
         render_regime(regime)
         if df.empty:
             st.warning("Sin resultados. Puede ser falta de datos/conexión: activa el "
@@ -758,11 +762,40 @@ def tab_validacion(cfg: dict) -> None:
         color(res.verdict)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_market(demo: bool, breadth):
+    return market.market_context(breadth=breadth)
+
+
+def render_market_header() -> None:
+    """Cabecera global siempre visible: termómetro de mercado (contexto)."""
+    ctx = cached_market(config.DEMO_MODE, st.session_state.get("breadth"))
+    cols = st.columns(4)
+    vix_txt = f"{ctx.vix:.1f}" if ctx.vix is not None else "—"
+    cols[0].metric(f"😱 VIX · {ctx.vix_label}", vix_txt,
+                   f"{ctx.vix_change:+.1f}%" if ctx.vix_change is not None else None)
+    cols[1].metric("🧭 Régimen S&P 500", ctx.regime.label if ctx.regime else "—")
+    if ctx.news and ctx.news.n > 0:
+        cols[2].metric("📰 Noticias macro", f"{ctx.news.score:+.2f}")
+    else:
+        cols[2].metric("📰 Noticias macro", "—")
+    cols[3].metric("📊 Amplitud (alcistas)",
+                   f"{ctx.breadth*100:.0f}%" if ctx.breadth is not None else "—")
+    bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828", "darkred": "#7f1010"}.get(ctx.clima_color, "#9e9e9e")
+    st.markdown(
+        f"<div style='background:{bg};color:white;padding:8px 14px;border-radius:8px'>"
+        f"🌡️ <b>Termómetro de mercado: {ctx.clima_label}</b> — {ctx.detail}</div>",
+        unsafe_allow_html=True,
+    )
+    st.caption("Contexto de mercado, **no es una predicción**. Úsalo para decidir si ser más o menos agresivo.")
+
+
 def main() -> None:
     st.title("📊 Balanzia Invest — Copiloto de inversión")
     st.caption("IBEX + EEUU · técnico + fundamental (Buffett/Graham) + Wyckoff + analistas + "
                "noticias · casi tiempo real · gratis y sin claves de pago.")
     cfg = sidebar()
+    render_market_header()
     tabs = st.tabs(["🧭 Recomendador", "📦 Cartera", "📓 Diario", "🔔 Alertas", "🧪 Validación"])
     with tabs[0]:
         tab_recomendador(cfg)
