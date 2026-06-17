@@ -12,6 +12,61 @@ import pandas as pd
 
 
 @dataclass
+class ProposedPosition:
+    ticker: str
+    name: str
+    weight: float          # fracción del capital asignada
+    amount: float          # importe asignado (capital * weight)
+    price: float           # precio actual (entrada)
+    shares: int
+    label: str             # señal del consenso
+
+
+def generate(candidates: pd.DataFrame, capital: float, n: int = 5,
+             method: str = "score") -> list[ProposedPosition]:
+    """Propone una cartera con los `n` mejores candidatos del escáner.
+
+    `method`:
+      - "equal": equiponderada.
+      - "score": peso proporcional a la fuerza de la señal (score positivo).
+      - "riesgo": menor peso a más volatilidad (proxy: 1/|profit_est|, acota concentración).
+    El precio de entrada se toma de la columna 'price' si existe; si no, se omite
+    la posición (no se puede dimensionar sin precio).
+    """
+    if candidates is None or candidates.empty or capital <= 0 or n <= 0:
+        return []
+    df = candidates.head(n).copy()
+
+    if method == "equal":
+        df["_w"] = 1.0
+    elif method == "riesgo":
+        pe = df.get("profit_est")
+        df["_w"] = (1.0 / pe.abs().clip(lower=1.0)) if pe is not None else 1.0
+    else:  # "score": proporcional a la fuerza de la señal
+        df["_w"] = df["score"].abs().clip(lower=0.01) if "score" in df else 1.0
+
+    total = float(df["_w"].sum()) or 1.0
+    out: list[ProposedPosition] = []
+    for _, row in df.iterrows():
+        price = row.get("price")
+        if price is None or pd.isna(price) or float(price) <= 0:
+            continue
+        price = float(price)
+        w = float(row["_w"]) / total
+        amount = round(capital * w, 2)
+        out.append(ProposedPosition(
+            ticker=row.get("ticker", ""),
+            name=row.get("name", row.get("ticker", "")),
+            weight=round(w, 3),
+            amount=amount,
+            price=round(price, 2),
+            shares=int(amount // price),
+            label=row.get("label", ""),
+        ))
+    return out
+
+
+@dataclass
 class Position:
     ticker: str
     direction: int

@@ -173,31 +173,29 @@ def sidebar() -> dict:
     elif auto and st_autorefresh is None:
         st.sidebar.warning("Instala 'streamlit-autorefresh' para el refresco automático.")
 
-    _sidebar_watchlist()
+    _sidebar_watchlist(strategy, finnhub_key.strip() or None)
     st.sidebar.markdown("---")
     st.sidebar.warning("⚠️ Apoyo a la decisión, **no asesoramiento financiero**.")
     return {"strategy": strategy, "market": market, "capital": capital,
             "finnhub_key": finnhub_key.strip() or None, "demo": demo}
 
 
-def _ticker_exists(ticker: str) -> bool:
-    """Comprueba en vivo si el ticker existe en Yahoo (en demo, siempre True)."""
-    if config.DEMO_MODE:
-        return True
+def _current_price(ticker: str, finnhub_key: str | None = None) -> float | None:
+    """Precio actual (para fijar/seguir). Best-effort, nunca lanza."""
     try:
-        df = yahoo_data.get_prices(ticker, period="5d", interval="1d")
-        return df is not None and not df.empty
+        q = realtime.get_live_quote(ticker, finnhub_key)
+        return q.price
     except Exception:
-        return False
+        return None
 
 
-def _sidebar_watchlist() -> None:
+def _sidebar_watchlist(strategy: str | None = None, finnhub_key: str | None = None) -> None:
     st.sidebar.markdown("---")
-    st.sidebar.subheader("⭐ Mi watchlist")
-    current = watchlist.load()
+    st.sidebar.subheader("⭐ Seguimiento")
+    current = watchlist.tickers()
 
     # Buscador UNIVERSAL: escribe cualquier ticker (aunque no esté en el catálogo).
-    typed = st.sidebar.text_input("Añadir ticker (cualquiera)", key="wl_add",
+    typed = st.sidebar.text_input("Fijar ticker (cualquiera)", key="wl_add",
                                   placeholder="Ej.: SPCX, NVDA, SAN.MC")
     pick = st.sidebar.selectbox(
         "…o elige de la lista",
@@ -205,28 +203,22 @@ def _sidebar_watchlist() -> None:
         format_func=lambda t: "— sugerencias —" if t == "" else catalog.label(t),
         key="wl_pick",
     )
-    if st.sidebar.button("Añadir", key="wl_add_btn"):
+    if st.sidebar.button("📌 Fijar", key="wl_add_btn"):
         chosen = (typed.strip() or pick).upper()
         if chosen:
-            # Añadir SIEMPRE (no depender de una comprobación de red que puede
-            # fallar por rate-limit o con valores .MC). La verificación es solo
-            # un aviso informativo, nunca bloquea el seguimiento.
-            watchlist.add(chosen)
-            if not _ticker_exists(chosen):
-                st.session_state["wl_unverified"] = chosen
+            # Añadir SIEMPRE; guardamos el precio de fijación y la estrategia.
+            price = _current_price(chosen, finnhub_key)
+            watchlist.add(chosen, price=price, strategy=strategy)
             st.rerun()
-    if st.session_state.pop("wl_unverified", None):
-        st.sidebar.info("Añadido. No pude verificarlo ahora (Yahoo puede estar limitando); "
-                        "se mostrará al escanear/analizar.")
     if current:
         to_remove = st.sidebar.multiselect("Quitar", current, key="wl_rm")
         if to_remove:
             for t in to_remove:
                 watchlist.remove(t)
             st.rerun()
-        st.sidebar.caption("En lista: " + ", ".join(current))
+        st.sidebar.caption("En seguimiento: " + ", ".join(current))
     else:
-        st.sidebar.caption("Aún no tienes valores guardados.")
+        st.sidebar.caption("Aún no sigues ningún valor.")
 
 
 # ----------------------------- componentes --------------------------------
@@ -476,9 +468,9 @@ def tab_recomendador(cfg: dict) -> None:
                     for sym, name in matches[:8]:
                         st.write(f"- `{sym}` — {name}")
             else:
-                if st.button(f"⭐ Añadir {t} a mi watchlist", key="uni_addwl"):
-                    watchlist.add(t)
-                    st.success(f"{t} añadido a tu watchlist.")
+                if st.button(f"📌 Fijar {t} en seguimiento", key="uni_addwl"):
+                    watchlist.add(t, price=a.last_price, strategy=cfg["strategy"])
+                    st.success(f"{t} fijado a {a.last_price:.2f} (estrategia: {cfg['strategy']}).")
                 render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
             return
 
@@ -558,7 +550,7 @@ def tab_recomendador(cfg: dict) -> None:
         df = df.drop(columns=["_fuerza", "_calidad_profit"]).reset_index(drop=True)
 
         show = df.rename(columns={"ticker": "Ticker", "name": "Nombre", "label": "Señal",
-                                  "score": "Score", "confidence": "Confianza",
+                                  "score": "Score", "confidence": "Confianza", "price": "Precio",
                                   "profit_est": "Profit est. %", "rr": "R:R",
                                   "reason": "Motivo principal", "rel_volume": "Vol. rel."})
         st.dataframe(show, hide_index=True, use_container_width=True)
@@ -709,9 +701,97 @@ def _earnings_warning(earnings_date: str | None) -> None:
                    "Mejor esperar a después de la publicación o reducir tamaño.")
 
 
+def tab_seguimiento(cfg: dict) -> None:
+    st.subheader("⭐ Seguimiento")
+    st.caption("Acciones que has fijado: su precio de fijación, la estrategia y cómo evolucionan.")
+    rows = watchlist.entries()
+    if not rows:
+        st.info("Aún no sigues ningún valor. Fíjalos desde la barra lateral 📌 o desde la ficha.")
+        return
+
+    with st.spinner("Actualizando precios…"):
+        prices = yahoo_data.get_prices_batch([e["ticker"] for e in rows])
+
+    table = []
+    for e in rows:
+        df = prices.get(e["ticker"])
+        cur = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
+        pin = e.get("pin_price")
+        evol = ((cur - pin) / pin * 100) if (cur and pin) else None
+        table.append({
+            "Ticker": e["ticker"],
+            "Estrategia": e.get("strategy") or "—",
+            "Fijado el": e.get("pin_date") or "—",
+            "P. fijación": f"{pin:.2f}" if pin else "—",
+            "P. actual": f"{cur:.2f}" if cur else "—",
+            "Evolución": f"{evol:+.1f}%" if evol is not None else "—",
+        })
+    st.dataframe(pd.DataFrame(table), hide_index=True, use_container_width=True)
+
+    # Fijar precio a los migrados (sin precio de fijación).
+    sin_precio = [e["ticker"] for e in rows if not e.get("pin_price")]
+    if sin_precio:
+        if st.button(f"📌 Fijar precio actual a {len(sin_precio)} valor(es) sin precio"):
+            for e in rows:
+                if not e.get("pin_price"):
+                    df = prices.get(e["ticker"])
+                    if df is not None and not df.empty:
+                        watchlist.set_price(e["ticker"], round(float(df["Close"].iloc[-1]), 2),
+                                            strategy=cfg["strategy"])
+            st.rerun()
+
+    choice = st.selectbox("📈 Ver ficha de:", [e["ticker"] for e in rows], key="seg_ficha")
+    if choice:
+        with st.spinner(f"Analizando {choice}…"):
+            a = cached_analyze(choice, cfg["strategy"], cfg["capital"], cfg["demo"])
+        render_analysis(a, cfg["finnhub_key"], cfg["strategy"])
+
+
+def _generador_cartera(cfg: dict) -> None:
+    st.markdown("### 🧰 Generar cartera")
+    st.caption(f"Propuesta a partir del escáner de **{cfg['strategy']}** · **{cfg['market']}** "
+               "(cámbialos en la barra lateral).")
+    c = st.columns(3)
+    n = c[0].slider("Nº de posiciones", 2, 15, 5, key="gen_n")
+    method = c[1].selectbox("Reparto", ["score", "equal", "riesgo"],
+                            format_func={"score": "Por fuerza de señal", "equal": "Equiponderado",
+                                         "riesgo": "Ajustado a riesgo"}.get, key="gen_method")
+    if c[2].button("🧰 Generar", type="primary"):
+        with st.spinner("Escaneando y construyendo cartera…"):
+            if cfg["market"] == MYLIST_NAME:
+                raw = st.session_state.get("mylist_raw", "")
+                mylist = [s.strip().upper() for s in raw.replace(",", " ").split() if s.strip()]
+                df, _ = cached_screen_tickers(tuple(mylist), cfg["strategy"], cfg["capital"], cfg["demo"])
+            elif cfg["market"] == WATCHLIST_NAME:
+                df, _ = cached_screen_tickers(tuple(watchlist.tickers()), cfg["strategy"], cfg["capital"], cfg["demo"])
+            else:
+                df, _ = cached_screen(cfg["market"], cfg["strategy"], cfg["capital"], cfg["demo"])
+            # Solo candidatos accionables (no Neutral) para la cartera.
+            if not df.empty:
+                df = df[df["label"] != "Neutral"]
+            positions = portfolio.generate(df, cfg["capital"], n=n, method=method)
+        if not positions:
+            st.warning("No hay candidatos suficientes para construir la cartera ahora mismo.")
+            return
+        invertido = sum(p.amount for p in positions)
+        st.success(f"Cartera propuesta de {len(positions)} posiciones · invertido "
+                   f"{invertido:.0f} de {cfg['capital']:.0f} ({invertido/cfg['capital']*100:.0f}%).")
+        st.dataframe(pd.DataFrame([{
+            "Ticker": p.ticker, "Nombre": p.name, "Señal": p.label,
+            "% cartera": f"{p.weight*100:.0f}%", "Importe": round(p.amount, 0),
+            "Precio": p.price, "Acciones": p.shares} for p in positions]),
+            hide_index=True, use_container_width=True)
+        if st.button("📌 Fijar toda la cartera en seguimiento"):
+            for p in positions:
+                watchlist.add(p.ticker, price=p.price, strategy=cfg["strategy"])
+            st.success("Cartera fijada en seguimiento.")
+    st.markdown("---")
+
+
 def tab_cartera(cfg: dict) -> None:
     st.subheader("📦 Cartera")
-    st.caption("Riesgo a nivel de cartera con tus operaciones abiertas del diario.")
+    _generador_cartera(cfg)
+    st.markdown("#### Riesgo de tus posiciones abiertas (diario)")
     open_t = journal.open_trades()
     if not open_t:
         st.info("No tienes operaciones abiertas. Registra/anota planes en la pestaña 📓 Diario.")
@@ -800,16 +880,19 @@ def main() -> None:
                "noticias · casi tiempo real · gratis y sin claves de pago.")
     cfg = sidebar()
     render_market_header()
-    tabs = st.tabs(["🧭 Recomendador", "📦 Cartera", "📓 Diario", "🔔 Alertas", "🧪 Validación"])
+    tabs = st.tabs(["🧭 Recomendador", "⭐ Seguimiento", "📦 Cartera", "📓 Diario",
+                    "🔔 Alertas", "🧪 Validación"])
     with tabs[0]:
         tab_recomendador(cfg)
     with tabs[1]:
-        tab_cartera(cfg)
+        tab_seguimiento(cfg)
     with tabs[2]:
-        tab_diario()
+        tab_cartera(cfg)
     with tabs[3]:
-        tab_alertas()
+        tab_diario()
     with tabs[4]:
+        tab_alertas()
+    with tabs[5]:
         tab_validacion(cfg)
 
 

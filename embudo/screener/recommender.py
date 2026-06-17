@@ -26,6 +26,7 @@ class ScreenRow:
     label: str
     score: float
     confidence: float
+    price: float | None        # precio actual (para dimensionar carteras)
     profit_est: float | None   # % estimado hasta el objetivo (profit esperado)
     rr: float | None           # ratio beneficio/riesgo del plan
     reason: str
@@ -93,13 +94,14 @@ def screen(
             label=a.consensus.label,
             score=a.consensus.score,
             confidence=a.consensus.confidence,
+            price=a.last_price,
             profit_est=profit_est,
             rr=rr,
             reason=_top_reason(a),
             rel_volume=round(float(rv.dropna().iloc[-1]), 2) if rv is not None and not rv.dropna().empty else None,
         ))
 
-    cols = ["ticker", "name", "label", "score", "confidence", "profit_est", "rr", "reason", "rel_volume"]
+    cols = ["ticker", "name", "label", "score", "confidence", "price", "profit_est", "rr", "reason", "rel_volume"]
     if not rows:
         return pd.DataFrame(columns=cols)
 
