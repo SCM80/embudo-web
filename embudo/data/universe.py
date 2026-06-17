@@ -49,7 +49,6 @@ NASDAQ100 = [
 US_LARGE = list(dict.fromkeys(NASDAQ100 + DOW30))
 
 UNIVERSES: dict[str, list[str]] = {
-    "Magnificent 7 (rápido)": MAG7,
     "IBEX 35": IBEX35,
     "EEUU (Nasdaq 100 + Dow 30)": US_LARGE,
     "S&P 500": US_LARGE,            # contenido real vía descarga dinámica
@@ -58,7 +57,6 @@ UNIVERSES: dict[str, list[str]] = {
 
 # Índices de referencia para detectar el régimen de cada universo.
 REGIME_INDEX = {
-    "Magnificent 7 (rápido)": "^GSPC",
     "IBEX 35": "^IBEX",
     "EEUU (Nasdaq 100 + Dow 30)": "^NDX",
     "S&P 500": "^GSPC",
@@ -147,8 +145,6 @@ def _constituents(key: str) -> list[str]:
 
 def get_universe(name: str) -> list[str]:
     """Lista de tickers de un universo, dinámica y con fallback."""
-    if name == "Magnificent 7 (rápido)":
-        return MAG7
     if name == "IBEX 35":
         return _constituents("ibex35")
     if name == "Dow Jones 30":

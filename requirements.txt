@@ -1,6 +1,8 @@
-# Embudo — dependencias (todo gratuito, sin API keys de pago)
-streamlit>=1.33
-streamlit-autorefresh>=1.0.1   # auto-refresco "casi real" del dashboard
+# Balanzia Invest — dependencias (todo gratuito, sin API keys de pago)
+# Versiones FIJADAS a propósito: evita que al reinstalar cambie el JS de Streamlit
+# y el navegador falle con "Failed to fetch dynamically imported module".
+streamlit==1.58.0
+streamlit-autorefresh==1.0.1   # auto-refresco "casi real" del dashboard
 pandas>=2.0
 numpy>=1.24
 plotly>=5.20

@@ -32,6 +32,7 @@ class Analysis:
     backtest: backtest.BacktestResult | None
     levels: list[Level] = field(default_factory=list)
     fundamentals: dict = field(default_factory=dict)   # KPIs crudos para la cabecera
+    data_warning: str | None = None   # aviso si el análisis se basa en datos pobres
     error: str | None = None
 
     @property
@@ -39,6 +40,16 @@ class Analysis:
         if self.df is None or self.df.empty:
             return None
         return float(self.df["Close"].iloc[-1])
+
+    @property
+    def n_bars(self) -> int:
+        return 0 if self.df is None else len(self.df)
+
+    @property
+    def last_date(self):
+        if self.df is None or self.df.empty:
+            return None
+        return self.df.index[-1]
 
 
 def analyze(
@@ -71,11 +82,17 @@ def analyze(
     fundamental_view = fundamentals.evaluate(None)
     name = ticker
     fund: dict = {}
+    is_us = "." not in ticker          # VADER es inglés: solo fiable en valores US
     if with_qualitative:
         fund = yahoo.get_fundamentals(ticker)
         name = fund.get("name", ticker)
         analyst_view = analysts.from_mean(fund.get("recommendation_mean"), fund.get("num_analysts", 0))
-        sentiment_view = sentiment.analyze(fund.get("headlines", []))
+        # Sentimiento solo para US; en otros mercados VADER (inglés) sería ruido.
+        if is_us:
+            sentiment_view = sentiment.analyze(fund.get("headlines", []))
+        else:
+            sentiment_view = sentiment.analyze([])
+            sentiment_view.detail = "No aplicable (VADER es inglés; titulares no fiables para este mercado)."
         fundamental_view = fundamentals.evaluate(fund, price=float(df["Close"].iloc[-1]))
 
     cons = engine.evaluate(df, profile, analyst_view, sentiment_view, fundamental_view, regime)
@@ -106,7 +123,25 @@ def analyze(
 
     bt = backtest.run(raw, profile) if with_backtest else None
 
-    return Analysis(ticker, name, profile, df, cons, plan, bt, levels=sr_levels, fundamentals=fund)
+    # Aviso de calidad/frescura: pocos datos o último dato viejo -> el análisis
+    # no es fiable y no debe presentarse como un veredicto firme.
+    data_warning = None
+    n_bars = len(df)
+    if n_bars < 60:
+        data_warning = (f"Solo {n_bars} sesiones de histórico: insuficiente para un análisis "
+                        "fiable (medias e indicadores incompletos).")
+    else:
+        try:
+            from datetime import datetime, timedelta
+            last = df.index[-1].to_pydatetime().replace(tzinfo=None)
+            if datetime.now() - last > timedelta(days=7):
+                data_warning = (f"Último dato del {last.date()}: posiblemente desactualizado "
+                                "(festivo, baja liquidez o problema de la fuente).")
+        except Exception:
+            pass
+
+    return Analysis(ticker, name, profile, df, cons, plan, bt, levels=sr_levels,
+                    fundamentals=fund, data_warning=data_warning)
 
 
 def _empty_consensus() -> Consensus:

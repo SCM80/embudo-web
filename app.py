@@ -346,6 +346,12 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
     st.markdown(f"### {a.name}  ·  `{a.ticker}`")
     quote = kpi_header(a, finnhub_key)
 
+    # Frescura/calidad de los datos sobre los que se construye el análisis.
+    fecha = a.last_date.date().isoformat() if a.last_date is not None else "—"
+    st.caption(f"🗓️ Datos: {a.n_bars} sesiones · último {fecha}")
+    if a.data_warning:
+        st.warning("⚠️ " + a.data_warning)
+
     # ============ ANÁLISIS OBJETIVO (igual sea cual sea la estrategia) ============
     st.markdown("#### 📊 Análisis objetivo del valor")
     st.caption("Este análisis es el **mismo para cualquier estrategia**: valora el activo de "
@@ -402,14 +408,24 @@ def render_analysis(a: analyzer.Analysis, finnhub_key: str | None = None,
 
     _earnings_warning(a.fundamentals.get("earnings_date"))
 
-    v = decision.decide(cons.score, strat_dir, profit_pct, rr, cons.confidence)
-    bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828"}[v.color]
-    st.markdown(
-        f"<div style='background:{bg};color:white;padding:16px 20px;border-radius:10px;margin-bottom:6px'>"
-        f"<span style='font-size:1.5rem;font-weight:800'>{v.emoji} {v.action}</span>"
-        f"<div style='font-size:1rem;margin-top:4px'>{v.phrase}</div></div>",
-        unsafe_allow_html=True,
-    )
+    if a.data_warning:
+        # Datos pobres -> no damos un veredicto firme (honestidad).
+        st.markdown(
+            "<div style='background:#7a7a7a;color:white;padding:16px 20px;border-radius:10px;margin-bottom:6px'>"
+            "<span style='font-size:1.5rem;font-weight:800'>⚠️ DATOS INSUFICIENTES</span>"
+            f"<div style='font-size:1rem;margin-top:4px'>{a.data_warning} "
+            "El análisis es orientativo; evita decidir solo con esto.</div></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        v = decision.decide(cons.score, strat_dir, profit_pct, rr, cons.confidence)
+        bg = {"green": "#0a8f3c", "orange": "#e08e0b", "red": "#c62828"}[v.color]
+        st.markdown(
+            f"<div style='background:{bg};color:white;padding:16px 20px;border-radius:10px;margin-bottom:6px'>"
+            f"<span style='font-size:1.5rem;font-weight:800'>{v.emoji} {v.action}</span>"
+            f"<div style='font-size:1rem;margin-top:4px'>{v.phrase}</div></div>",
+            unsafe_allow_html=True,
+        )
 
     sentido = "🔻 CORTO (ganas si baja)" if strat_dir < 0 else "🔼 LARGO (ganas si sube)"
     st.markdown(f"**Plan de precio · {sentido}**")
@@ -493,7 +509,7 @@ def tab_recomendador(cfg: dict) -> None:
         st.caption(f"📋 {len(mylist)} valores en tu lista.")
 
     # Estado de las listas dinámicas (componentes del índice).
-    if cfg["market"] not in (WATCHLIST_NAME, MYLIST_NAME, "Magnificent 7 (rápido)"):
+    if cfg["market"] not in (WATCHLIST_NAME, MYLIST_NAME):
         n = len(universe_data.get_universe(cfg["market"]))
         upd = universe_data.last_updated(cfg["market"])
         cc = st.columns([4, 1])

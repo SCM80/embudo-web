@@ -23,6 +23,10 @@ navegador**.
 
 Si falta alguno, el `.bat` te avisa con el enlace de descarga.
 
+> 💡 Si tras actualizar ves un error tipo *"Failed to fetch dynamically imported
+> module"*, es la caché del navegador: pulsa **Ctrl + F5** (refresco forzado) una
+> vez y desaparece.
+
 ## Opción manual (si ya clonaste el repo)
 
 Si ya tienes la carpeta del proyecto, usa **`BalanziaInvest.bat`** (está junto a
