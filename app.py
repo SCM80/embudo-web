@@ -208,12 +208,16 @@ def _sidebar_watchlist() -> None:
     if st.sidebar.button("Añadir", key="wl_add_btn"):
         chosen = (typed.strip() or pick).upper()
         if chosen:
-            if _ticker_exists(chosen):
-                watchlist.add(chosen)
-                st.rerun()
-            else:
-                st.sidebar.warning(f"No se encontró «{chosen}» en Yahoo. Revisa el ticker "
-                                   "(usa el símbolo exacto, p. ej. SAN.MC para el IBEX).")
+            # Añadir SIEMPRE (no depender de una comprobación de red que puede
+            # fallar por rate-limit o con valores .MC). La verificación es solo
+            # un aviso informativo, nunca bloquea el seguimiento.
+            watchlist.add(chosen)
+            if not _ticker_exists(chosen):
+                st.session_state["wl_unverified"] = chosen
+            st.rerun()
+    if st.session_state.pop("wl_unverified", None):
+        st.sidebar.info("Añadido. No pude verificarlo ahora (Yahoo puede estar limitando); "
+                        "se mostrará al escanear/analizar.")
     if current:
         to_remove = st.sidebar.multiselect("Quitar", current, key="wl_rm")
         if to_remove:
